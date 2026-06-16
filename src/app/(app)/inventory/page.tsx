@@ -125,21 +125,49 @@ export default function InventoryPage() {
   const handleImport = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    formData.set("stream", "true");
     setUploading(true);
     setImportResult("");
     setImportErrors([]);
     setProgress({ current: 0, total: 0, percent: 0 });
 
+    const finishImport = (data: {
+      successRows?: number;
+      failedRows?: number;
+      errors?: typeof importErrors;
+      error?: string;
+    }) => {
+      if (data.error) {
+        setImportResult(data.error);
+        return;
+      }
+      setImportResult(`Imported ${data.successRows ?? 0} rows. Failed: ${data.failedRows ?? 0}`);
+      setImportErrors(data.errors ?? []);
+      load();
+    };
+
     try {
-      const res = await fetch("/api/inventory/import", { method: "POST", body: formData });
-      if (!res.ok) {
-        const data = await res.json();
-        setImportResult(data.error || "Import failed");
+      const streamRes = await fetch("/api/inventory/import", {
+        method: "POST",
+        credentials: "include",
+        body: (() => {
+          formData.set("stream", "true");
+          return formData;
+        })(),
+      });
+
+      if (!streamRes.ok) {
+        const data = await streamRes.json().catch(() => ({}));
+        setImportResult((data as { error?: string }).error || `Import failed (${streamRes.status})`);
         return;
       }
 
-      const reader = res.body?.getReader();
+      const contentType = streamRes.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        finishImport(await streamRes.json());
+        return;
+      }
+
+      const reader = streamRes.body?.getReader();
       if (!reader) {
         setImportResult("Import failed: no response stream");
         return;
@@ -147,6 +175,7 @@ export default function InventoryPage() {
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let completed = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -177,18 +206,23 @@ export default function InventoryPage() {
             setProgress({
               current: data.current,
               total: data.total,
-              percent: data.percent ?? 0,
+              percent: data.percent ?? Math.round((data.current / data.total) * 100),
             });
           }
           if (data.done) {
-            setImportResult(`Imported ${data.successRows} rows. Failed: ${data.failedRows}`);
-            setImportErrors(data.errors ?? []);
-            load();
+            completed = true;
+            finishImport(data);
           }
         }
       }
+
+      if (!completed) {
+        setImportResult(
+          "Import timed out before finishing. Deploy the latest version and try again, or import a smaller file."
+        );
+      }
     } catch {
-      setImportResult("Import failed");
+      setImportResult("Import failed. Check your connection and try again.");
     } finally {
       setUploading(false);
     }

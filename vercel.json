@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "src/app/api/inventory/import/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

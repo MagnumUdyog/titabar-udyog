@@ -5,7 +5,11 @@ import { jwtVerify } from "jose";
 const PUBLIC_PATHS = ["/login", "/api/auth/login"];
 
 function getSecret() {
-  const secret = process.env.SESSION_SECRET;
+  const secret =
+    process.env.SESSION_SECRET ||
+    (process.env.NODE_ENV === "development"
+      ? "titiabar-dev-secret-key-local-only"
+      : undefined);
   if (!secret) return null;
   return new TextEncoder().encode(secret);
 }
@@ -22,6 +26,11 @@ export async function middleware(request: NextRequest) {
   }
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+
+  // Large Excel uploads are authenticated in the route handler.
+  if (pathname.startsWith("/api/inventory/import")) {
     return NextResponse.next();
   }
 

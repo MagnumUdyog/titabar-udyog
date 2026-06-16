@@ -1,14 +1,22 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { jsonError, handleApiError } from "@/lib/api";
 import { parseInventoryExcel, type ImportRow } from "@/lib/excel";
 import { logAudit } from "@/lib/stock";
 import { StockCategory } from "@prisma/client";
 
-const CHUNK_SIZE = 50;
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const BATCH_SIZE = 25;
+const PROGRESS_EVERY = 10;
 
 type ImportError = { rowNumber: number; message: string; itemName?: string };
+
+function itemKey(category: StockCategory, name: string) {
+  return `${category}::${name}`;
+}
 
 async function clearMasterList() {
   await prisma.$transaction(async (tx) => {
@@ -34,33 +42,74 @@ async function clearMasterList() {
   });
 }
 
-async function upsertRow(row: ImportRow): Promise<void> {
-  const existing = await prisma.inventoryItem.findFirst({
-    where: { name: row.name, category: row.category },
+async function importRows(
+  rows: ImportRow[],
+  onProgress?: (current: number, total: number) => void
+): Promise<{ successRows: number; importErrors: ImportError[] }> {
+  const existing = await prisma.inventoryItem.findMany({
+    select: { id: true, name: true, category: true },
   });
+  const existingByKey = new Map(
+    existing.map((item) => [itemKey(item.category, item.name), item])
+  );
 
-  if (existing) {
-    await prisma.inventoryItem.update({
-      where: { id: existing.id },
-      data: {
-        subHeading: row.subHeading,
-        unit: row.unit,
-        moq: 0,
-        isActive: true,
-      },
-    });
-  } else {
-    await prisma.inventoryItem.create({
-      data: {
-        name: row.name,
-        category: row.category,
-        subHeading: row.subHeading,
-        unit: row.unit,
-        moq: 0,
-        isActive: true,
-      },
-    });
+  const importErrors: ImportError[] = [];
+  let successRows = 0;
+  const total = rows.length;
+
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const row of batch) {
+          const key = itemKey(row.category, row.name);
+          const match = existingByKey.get(key);
+
+          if (match) {
+            await tx.inventoryItem.update({
+              where: { id: match.id },
+              data: {
+                subHeading: row.subHeading,
+                unit: row.unit,
+                moq: 0,
+                isActive: true,
+              },
+            });
+          } else {
+            const created = await tx.inventoryItem.create({
+              data: {
+                name: row.name,
+                category: row.category,
+                subHeading: row.subHeading,
+                unit: row.unit,
+                moq: 0,
+                isActive: true,
+              },
+            });
+            existingByKey.set(key, created);
+          }
+          successRows++;
+        }
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      for (const row of batch) {
+        importErrors.push({
+          rowNumber: row.rowNumber,
+          itemName: row.name,
+          message,
+        });
+      }
+    }
+
+    const current = Math.min(i + batch.length, total);
+    if (onProgress && (current % PROGRESS_EVERY === 0 || current === total)) {
+      onProgress(current, total);
+    }
   }
+
+  return { successRows, importErrors };
 }
 
 function errMsg(err: unknown): string {
@@ -70,7 +119,7 @@ function errMsg(err: unknown): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth();
+    const user = await requireAdmin();
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const mode = (formData.get("mode") as string) || "replace";
@@ -80,22 +129,45 @@ export async function POST(req: NextRequest) {
     if (!file) return jsonError("No file uploaded");
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const { rows, errors: parseErrors, debug } = parseInventoryExcel(buffer);
-
-    if (process.env.NODE_ENV === "development") {
-      console.log("Import debug preview:", JSON.stringify(debug?.preview));
-      console.log("Data starts at row index:", debug?.dataStartIndex);
-      console.log("Row 2 raw:", JSON.stringify(debug?.preview?.[2]));
-      console.log("Row 3 raw:", JSON.stringify(debug?.preview?.[3]));
-      if (rows[0]) console.log("First parsed row:", JSON.stringify(rows[0]));
-    }
+    const { rows, errors: parseErrors } = parseInventoryExcel(buffer);
 
     if (rows.length === 0) {
       return jsonError(parseErrors[0]?.message || "No valid rows in file");
     }
 
     if (!stream) {
-      return jsonError("Use stream=true for import");
+      if (mode === "replace") await clearMasterList();
+
+      const { successRows, importErrors } = await importRows(rows);
+      const allErrors = [...parseErrors, ...importErrors];
+
+      const batchCategory: StockCategory = rows[0]?.category ?? "TRADING_ITEM";
+      const batch = await prisma.inventoryImportBatch.create({
+        data: {
+          category: batchCategory,
+          fileName: file.name,
+          importedByUserId: user.id,
+          branchId,
+          totalRows: rows.length,
+          successRows,
+          failedRows: allErrors.length,
+        },
+      });
+
+      await logAudit(user.id, "IMPORT", "InventoryImportBatch", batch.id, branchId, {
+        fileName: file.name,
+        successRows,
+        failedRows: allErrors.length,
+        mode,
+      });
+
+      return Response.json({
+        done: true,
+        successRows,
+        failedRows: allErrors.length,
+        errors: allErrors,
+        batch,
+      });
     }
 
     const encoder = new TextEncoder();
@@ -108,36 +180,15 @@ export async function POST(req: NextRequest) {
         try {
           if (mode === "replace") await clearMasterList();
 
-          const importErrors: ImportError[] = [...parseErrors];
-          let successRows = 0;
-          const total = rows.length;
+          const { successRows, importErrors } = await importRows(rows, (current, total) => {
+            send({
+              current,
+              total,
+              percent: Math.round((current / total) * 100),
+            });
+          });
 
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            try {
-              await upsertRow(row);
-              successRows++;
-            } catch (err) {
-              const message = errMsg(err);
-              if (importErrors.length === 0) {
-                console.error("First import row error:", message, row);
-              }
-              importErrors.push({
-                rowNumber: row.rowNumber,
-                itemName: row.name,
-                message,
-              });
-            }
-
-            if ((i + 1) % CHUNK_SIZE === 0 || i === rows.length - 1) {
-              send({
-                current: i + 1,
-                total,
-                percent: Math.round(((i + 1) / total) * 100),
-              });
-            }
-          }
-
+          const allErrors = [...parseErrors, ...importErrors];
           const batchCategory: StockCategory = rows[0]?.category ?? "TRADING_ITEM";
           const batch = await prisma.inventoryImportBatch.create({
             data: {
@@ -147,22 +198,22 @@ export async function POST(req: NextRequest) {
               branchId,
               totalRows: rows.length,
               successRows,
-              failedRows: importErrors.length,
+              failedRows: allErrors.length,
             },
           });
 
           await logAudit(user.id, "IMPORT", "InventoryImportBatch", batch.id, branchId, {
             fileName: file.name,
             successRows,
-            failedRows: importErrors.length,
+            failedRows: allErrors.length,
             mode,
           });
 
           send({
             done: true,
             successRows,
-            failedRows: importErrors.length,
-            errors: importErrors,
+            failedRows: allErrors.length,
+            errors: allErrors,
             batch,
           });
         } catch (err) {
@@ -176,7 +227,7 @@ export async function POST(req: NextRequest) {
     return new Response(body, {
       headers: {
         "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
       },
     });
