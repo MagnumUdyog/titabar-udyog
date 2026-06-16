@@ -42,8 +42,9 @@ export default function LoginPage() {
             <Input
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="9876543210"
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              placeholder="9999999999"
+              inputMode="numeric"
               required
             />
           </div>

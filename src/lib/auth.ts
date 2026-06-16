@@ -36,6 +36,12 @@ export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
 
+export function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 10) return digits;
+  return digits.slice(-10);
+}
+
 export async function createSession(user: SessionUser) {
   const token = await new SignJWT({
     id: user.id,

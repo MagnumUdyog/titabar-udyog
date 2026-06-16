@@ -30,7 +30,7 @@ async function main() {
 
   await prisma.user.upsert({
     where: { phone: "9999999999" },
-    update: {},
+    update: { passwordHash, isActive: true },
     create: {
       name: "Admin",
       phone: "9999999999",
@@ -42,7 +42,7 @@ async function main() {
   const branchPassword = await bcrypt.hash("branch123", 12);
   await prisma.user.upsert({
     where: { phone: "8888888888" },
-    update: {},
+    update: { passwordHash: branchPassword, isActive: true, branchId: mainBranch.id },
     create: {
       name: "Main Branch User",
       phone: "8888888888",

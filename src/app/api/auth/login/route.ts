@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { createSession, verifyPassword } from "@/lib/auth";
+import { createSession, verifyPassword, normalizePhone } from "@/lib/auth";
 import { jsonOk, jsonError, handleApiError } from "@/lib/api";
 import { logAudit } from "@/lib/stock";
 import { z } from "zod";
@@ -13,8 +13,13 @@ const schema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const body = schema.parse(await req.json());
+    const phone = normalizePhone(body.phone);
+    if (phone.length < 10) {
+      return jsonError("Invalid phone or password", 401);
+    }
+
     const user = await prisma.user.findUnique({
-      where: { phone: body.phone },
+      where: { phone },
       include: { branch: true },
     });
 
