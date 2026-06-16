@@ -22,18 +22,46 @@ export function handleApiError(error: unknown) {
   if (error instanceof ZodError) {
     return jsonError("Validation failed", 400, { details: error.flatten() });
   }
+
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  const databaseMissing =
+    !databaseUrl ||
+    (!databaseUrl.startsWith("postgresql://") && !databaseUrl.startsWith("postgres://"));
+
+  if (databaseMissing) {
+    return jsonError(
+      "Database not configured. Set DATABASE_URL in .env.local, then run: npm run db:push && npm run db:seed",
+      503
+    );
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (["P1001", "P1002", "P1008", "P1017", "P2024"].includes(error.code)) {
+      console.error("Database connection error:", error.code, error.message);
+      return jsonError("Database temporarily unavailable. Please try again.", 503);
+    }
+  }
+
   if (
     error instanceof Prisma.PrismaClientInitializationError ||
-    (error instanceof Error && error.message.includes("DATABASE_URL"))
+    (error instanceof Error &&
+      (error.message.includes("Can't reach database server") ||
+        error.message.includes("Connection pool timeout") ||
+        error.message.includes("Too many connections")))
   ) {
+    console.error("Prisma connection error:", error);
     const staleClient =
       error instanceof Error &&
       error.message.includes("must start with the protocol `postgresql://`");
-    const message = staleClient
-      ? "Database connection is stale after changing DATABASE_URL. Stop and restart `npm run dev`, then try again."
-      : "Database not configured. Set DATABASE_URL in .env.local, then run: npm run db:push && npm run db:seed";
-    return jsonError(message, 503);
+    if (staleClient && process.env.NODE_ENV !== "production") {
+      return jsonError(
+        "Database connection is stale after changing DATABASE_URL. Stop and restart `npm run dev`, then try again.",
+        503
+      );
+    }
+    return jsonError("Database temporarily unavailable. Please try again.", 503);
   }
+
   console.error(error);
   return jsonError("Internal server error", 500);
 }
