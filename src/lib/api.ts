@@ -26,10 +26,13 @@ export function handleApiError(error: unknown) {
     error instanceof Prisma.PrismaClientInitializationError ||
     (error instanceof Error && error.message.includes("DATABASE_URL"))
   ) {
-    return jsonError(
-      "Database not configured. Set DATABASE_URL in .env.local, then run: npm run db:push && npm run db:seed",
-      503
-    );
+    const staleClient =
+      error instanceof Error &&
+      error.message.includes("must start with the protocol `postgresql://`");
+    const message = staleClient
+      ? "Database connection is stale after changing DATABASE_URL. Stop and restart `npm run dev`, then try again."
+      : "Database not configured. Set DATABASE_URL in .env.local, then run: npm run db:push && npm run db:seed";
+    return jsonError(message, 503);
   }
   console.error(error);
   return jsonError("Internal server error", 500);
