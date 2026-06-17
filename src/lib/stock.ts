@@ -247,19 +247,21 @@ export async function checkOrderStockWarnings(
   items: { inventoryItemId: string; quantity: number; itemName?: string }[],
   excludeOrderId?: string
 ): Promise<OrderStockWarning[]> {
-  const availability = await getItemsAvailableStock(
-    branchId,
-    items.map((i) => i.inventoryItemId),
-    excludeOrderId
-  );
+  if (items.length === 0) return [];
+
+  const itemIds = items.map((i) => i.inventoryItemId);
+  const [availability, invItems] = await Promise.all([
+    getItemsAvailableStock(branchId, itemIds, excludeOrderId),
+    prisma.inventoryItem.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, name: true, moq: true },
+    }),
+  ]);
+  const invMap = new Map(invItems.map((inv) => [inv.id, inv]));
   const warnings: OrderStockWarning[] = [];
 
   for (const item of items) {
-    const inv = await prisma.inventoryItem.findUnique({
-      where: { id: item.inventoryItemId },
-      select: { name: true, moq: true },
-    });
-
+    const inv = invMap.get(item.inventoryItemId);
     const available = availability[item.inventoryItemId] ?? 0;
     const moq = inv?.moq ?? 0;
     const exceedsStock = item.quantity > available;
@@ -286,44 +288,51 @@ export async function checkStockAvailability(
   items: { inventoryItemId: string; quantity: number }[],
   excludeOrderId?: string
 ): Promise<StockCheckResult[]> {
-  const results: StockCheckResult[] = [];
+  if (items.length === 0) return [];
 
-  for (const item of items) {
-    const balance = await prisma.stockBalance.findUnique({
-      where: {
-        branchId_inventoryItemId: {
-          branchId,
-          inventoryItemId: item.inventoryItemId,
-        },
-      },
-    });
+  const itemIds = items.map((i) => i.inventoryItemId);
 
-    const available = balance ? toNumber(balance.availableQty) : 0;
-
-    const otherReservations = await prisma.orderStockReservation.aggregate({
+  const [balances, otherReservations, ownReservations] = await Promise.all([
+    prisma.stockBalance.findMany({
+      where: { branchId, inventoryItemId: { in: itemIds } },
+    }),
+    prisma.orderStockReservation.groupBy({
+      by: ["inventoryItemId"],
       where: {
         branchId,
-        inventoryItemId: item.inventoryItemId,
+        inventoryItemId: { in: itemIds },
         status: "ACTIVE",
         ...(excludeOrderId ? { orderId: { not: excludeOrderId } } : {}),
       },
       _sum: { quantity: true },
-    });
-
-    const ownReservation = excludeOrderId
-      ? await prisma.orderStockReservation.aggregate({
+    }),
+    excludeOrderId
+      ? prisma.orderStockReservation.groupBy({
+          by: ["inventoryItemId"],
           where: {
             orderId: excludeOrderId,
             branchId,
-            inventoryItemId: item.inventoryItemId,
+            inventoryItemId: { in: itemIds },
             status: "ACTIVE",
           },
           _sum: { quantity: true },
         })
-      : null;
+      : Promise.resolve([]),
+  ]);
 
-    const reservedByOthers = toNumber(otherReservations._sum.quantity);
-    const ownReservedQty = toNumber(ownReservation?._sum.quantity);
+  const balanceMap = new Map(balances.map((b) => [b.inventoryItemId, b]));
+  const otherReservedMap = new Map(
+    otherReservations.map((row) => [row.inventoryItemId, toNumber(row._sum.quantity)])
+  );
+  const ownReservedMap = new Map(
+    ownReservations.map((row) => [row.inventoryItemId, toNumber(row._sum.quantity)])
+  );
+
+  return items.map((item) => {
+    const balance = balanceMap.get(item.inventoryItemId);
+    const available = balance ? toNumber(balance.availableQty) : 0;
+    const reservedByOthers = otherReservedMap.get(item.inventoryItemId) ?? 0;
+    const ownReservedQty = ownReservedMap.get(item.inventoryItemId) ?? 0;
     const effectiveAvailable = available + ownReservedQty;
     const sufficient = effectiveAvailable >= item.quantity;
 
@@ -333,17 +342,15 @@ export async function checkStockAvailability(
         "There is already a pending order for this item and quantity. No stock is left for this new order. Do you really want to create this order?";
     }
 
-    results.push({
+    return {
       inventoryItemId: item.inventoryItemId,
       requestedQty: item.quantity,
       availableQty: effectiveAvailable,
       reservedByOthers,
       sufficient,
       warning,
-    });
-  }
-
-  return results;
+    };
+  });
 }
 
 export async function reserveStockForOrder(
@@ -696,39 +703,46 @@ export async function getLowStockItems(
   branchId: string,
   category?: StockCategory
 ): Promise<{ count: number; items: LowStockItem[] }> {
-  const masterItems = await prisma.inventoryItem.findMany({
-    where: {
-      isActive: true,
-      ...(category ? { category } : {}),
-    },
-    orderBy: { name: "asc" },
-  });
+  const rows = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      name: string;
+      category: StockCategory;
+      moq: number;
+      unit: string | null;
+      onHand: number;
+      reserved: number;
+      available: number;
+    }>
+  >`
+    SELECT
+      i.id,
+      i.name,
+      i.category,
+      i.moq,
+      i.unit,
+      COALESCE(sb."onHandQty", 0)::float AS "onHand",
+      COALESCE(sb."reservedQty", 0)::float AS "reserved",
+      COALESCE(sb."availableQty", 0)::float AS "available"
+    FROM "InventoryItem" i
+    LEFT JOIN "StockBalance" sb
+      ON sb."inventoryItemId" = i.id AND sb."branchId" = ${branchId}
+    WHERE i."isActive" = true
+      ${category ? Prisma.sql`AND i.category = ${category}::"StockCategory"` : Prisma.empty}
+      AND COALESCE(sb."availableQty", 0) <= i.moq
+    ORDER BY i.name ASC
+  `;
 
-  const balances = await prisma.stockBalance.findMany({
-    where: {
-      branchId,
-      inventoryItemId: { in: masterItems.map((i) => i.id) },
-    },
-  });
-  const balanceMap = new Map(balances.map((b) => [b.inventoryItemId, b]));
-
-  const lowStockItems: LowStockItem[] = [];
-  for (const item of masterItems) {
-    const bal = balanceMap.get(item.id);
-    const available = bal ? toNumber(bal.availableQty) : 0;
-    if (available <= item.moq) {
-      lowStockItems.push({
-        inventoryItemId: item.id,
-        name: item.name,
-        unit: item.unit ?? "",
-        category: item.category,
-        available,
-        moq: item.moq,
-        onHand: bal ? toNumber(bal.onHandQty) : 0,
-        reserved: bal ? toNumber(bal.reservedQty) : 0,
-      });
-    }
-  }
+  const lowStockItems: LowStockItem[] = rows.map((row) => ({
+    inventoryItemId: row.id,
+    name: row.name,
+    unit: row.unit ?? "",
+    category: row.category,
+    available: row.available,
+    moq: row.moq,
+    onHand: row.onHand,
+    reserved: row.reserved,
+  }));
 
   const manual = await fetchManualLowStockAlerts(branchId, category);
   const items = mergeLowStockItems(lowStockItems, manual);
@@ -744,10 +758,14 @@ export async function getLowStockItemsAllBranches(
     orderBy: { name: "asc" },
   });
 
+  const branchResults = await Promise.all(
+    branches.map((branch) => getLowStockItems(branch.id, category))
+  );
+
   const allItems: LowStockItem[] = [];
-  for (const branch of branches) {
-    const { items } = await getLowStockItems(branch.id, category);
-    for (const item of items) {
+  for (let i = 0; i < branches.length; i++) {
+    const branch = branches[i];
+    for (const item of branchResults[i].items) {
       allItems.push({
         ...item,
         branchId: branch.id,

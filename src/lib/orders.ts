@@ -15,16 +15,36 @@ export async function resolveOrderItems(items: OrderItemInput[]) {
     quantity: number;
   }> = [];
 
+  const ids = items
+    .map((i) => i.inventoryItemId)
+    .filter((id): id is string => Boolean(id));
+  const names = items
+    .filter((i) => !i.inventoryItemId && i.itemName?.trim())
+    .map((i) => i.itemName!.trim());
+
+  const [byId, byName] = await Promise.all([
+    ids.length > 0
+      ? prisma.inventoryItem.findMany({ where: { id: { in: ids } } })
+      : Promise.resolve([]),
+    names.length > 0
+      ? prisma.inventoryItem.findMany({ where: { name: { in: names } } })
+      : Promise.resolve([]),
+  ]);
+
+  const idMap = new Map(byId.map((inv) => [inv.id, inv]));
+  const nameMap = new Map<string, (typeof byName)[number]>();
+  for (const inv of byName) {
+    if (!nameMap.has(inv.name)) nameMap.set(inv.name, inv);
+  }
+
   for (const item of items) {
     let inv;
     if (item.inventoryItemId) {
-      inv = await prisma.inventoryItem.findUnique({ where: { id: item.inventoryItemId } });
+      inv = idMap.get(item.inventoryItemId);
       if (!inv) throw new StockError(`Item ${item.inventoryItemId} not found`);
     } else if (item.itemName?.trim()) {
       const name = item.itemName.trim();
-      inv = await prisma.inventoryItem.findFirst({
-        where: { name },
-      });
+      inv = nameMap.get(name);
       if (!inv) {
         inv = await prisma.inventoryItem.create({
           data: {
@@ -34,6 +54,7 @@ export async function resolveOrderItems(items: OrderItemInput[]) {
             subHeading: "GENERAL",
           },
         });
+        nameMap.set(name, inv);
       }
     } else {
       throw new StockError("Each line needs an item from inventory or a name");

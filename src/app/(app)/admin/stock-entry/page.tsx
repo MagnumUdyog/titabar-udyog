@@ -78,15 +78,19 @@ function StockEntryContent() {
     }
     setMovementsLoading(true);
     try {
-      const params = new URLSearchParams({ branchId, page: "1", limit: "1" });
+      const params = new URLSearchParams({
+        branchId,
+        page: "1",
+        limit: String(20),
+      });
       if (movementTab !== "ALL") params.set("category", movementTab);
       if (debouncedMovementSearch) params.set("search", debouncedMovementSearch);
       if (movementMonth) params.set("month", movementMonth);
       if (movementYear) params.set("year", movementYear);
-      const data = await api<{ recentMovements: Array<Record<string, unknown>> }>(
-        `/api/stocks?${params}`
+      const data = await api<{ movements: Array<Record<string, unknown>> }>(
+        `/api/stocks/movements?${params}`
       );
-      setMovements(data.recentMovements);
+      setMovements(data.movements);
     } finally {
       setMovementsLoading(false);
     }

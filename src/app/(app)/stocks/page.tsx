@@ -26,6 +26,9 @@ import { cn, formatQty, formatUnit } from "@/lib/utils";
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
 type TabKey = Category | "ALL";
 
+const PAGE_SIZE = 50;
+const MOVEMENTS_PAGE_SIZE = 20;
+
 const TABS: { key: TabKey; label: string }[] = [
   { key: "ALL", label: "All" },
   { key: "RAW_MATERIAL", label: "Raw Materials" },
@@ -42,6 +45,27 @@ const defaultDateFilter = (): DateFilterState => ({
   toDate: "",
 });
 
+function movementQueryParams(
+  branchId: string,
+  tab: TabKey,
+  debouncedSearch: string,
+  month: string,
+  year: string,
+  page: number,
+  limit: number
+) {
+  const params = new URLSearchParams({
+    branchId,
+    page: String(page),
+    limit: String(limit),
+  });
+  if (tab !== "ALL") params.set("category", tab);
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (month) params.set("month", month);
+  if (year) params.set("year", year);
+  return params;
+}
+
 export default function StocksPage() {
   const router = useRouter();
   const [branchId, setBranchId] = useState("");
@@ -50,9 +74,15 @@ export default function StocksPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [balances, setBalances] = useState<Array<Record<string, unknown>>>([]);
   const [movements, setMovements] = useState<Array<Record<string, unknown>>>([]);
+  const [movementsPage, setMovementsPage] = useState(1);
+  const [movementsHasMore, setMovementsHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [movementsLoading, setMovementsLoading] = useState(false);
+  const [loadingMoreMovements, setLoadingMoreMovements] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [pdfStockCategory, setPdfStockCategory] = useState<ReportCategory>("ALL");
   const [includeMovements, setIncludeMovements] = useState(false);
@@ -65,45 +95,120 @@ export default function StocksPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const load = useCallback(async () => {
+  const loadBalances = useCallback(async () => {
     if (!branchId) {
       setBalances([]);
-      setMovements([]);
+      setTotal(0);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const params = new URLSearchParams({ branchId, page: "1", limit: "500" });
+    const params = new URLSearchParams({
+      branchId,
+      page: String(page),
+      limit: String(PAGE_SIZE),
+    });
     if (tab !== "ALL") params.set("category", tab);
     if (debouncedSearch) params.set("search", debouncedSearch);
-    if (month) params.set("month", month);
-    if (year) params.set("year", year);
 
     try {
-      const data = await api<{ balances: Array<Record<string, unknown>>; recentMovements: Array<Record<string, unknown>> }>(
-        `/api/stocks?${params}`
-      );
+      const data = await api<{
+        balances: Array<Record<string, unknown>>;
+        total: number;
+      }>(`/api/stocks?${params}`);
       setBalances(data.balances);
-      setMovements(data.recentMovements);
+      setTotal(data.total);
     } finally {
       setLoading(false);
     }
-  }, [branchId, tab, debouncedSearch, month, year]);
+  }, [branchId, tab, debouncedSearch, page]);
 
-  useEffect(() => { load(); }, [load]);
+  const loadMovements = useCallback(
+    async (pageNum: number, append: boolean) => {
+      if (!branchId) {
+        setMovements([]);
+        setMovementsHasMore(false);
+        return;
+      }
+      if (append) {
+        setLoadingMoreMovements(true);
+      } else {
+        setMovementsLoading(true);
+      }
+
+      try {
+        const params = movementQueryParams(
+          branchId,
+          tab,
+          debouncedSearch,
+          month,
+          year,
+          pageNum,
+          MOVEMENTS_PAGE_SIZE
+        );
+        const data = await api<{
+          movements: Array<Record<string, unknown>>;
+          hasMore: boolean;
+        }>(`/api/stocks/movements?${params}`);
+
+        setMovements((prev) =>
+          append ? [...prev, ...data.movements] : data.movements
+        );
+        setMovementsHasMore(data.hasMore);
+        setMovementsPage(pageNum);
+      } finally {
+        setMovementsLoading(false);
+        setLoadingMoreMovements(false);
+      }
+    },
+    [branchId, tab, debouncedSearch, month, year]
+  );
+
+  useEffect(() => {
+    loadBalances();
+  }, [loadBalances]);
+
+  useEffect(() => {
+    setMovementsPage(1);
+    loadMovements(1, false);
+  }, [loadMovements]);
 
   const downloadPdf = async () => {
     if (!branchId) return;
     setPdfLoading(true);
     try {
       const dateParams = buildMovementDateParams(dateFilter);
-      const data = await api<{
-        balances: Array<Record<string, unknown>>;
-        recentMovements: Array<Record<string, unknown>>;
-      }>(`/api/stocks?branchId=${branchId}&page=1&limit=500&${dateParams.toString()}`);
+      const stockParams = new URLSearchParams({
+        branchId,
+        page: "1",
+        limit: "2000",
+        export: "true",
+      });
+
+      const movementParams = movementQueryParams(
+        branchId,
+        "ALL",
+        "",
+        dateParams.get("month") || "",
+        dateParams.get("year") || dateFilter.year,
+        1,
+        2000
+      );
+      movementParams.set("export", "true");
+      if (dateParams.get("dateFrom")) movementParams.set("dateFrom", dateParams.get("dateFrom")!);
+      if (dateParams.get("dateTo")) movementParams.set("dateTo", dateParams.get("dateTo")!);
+
+      const [stockData, movementData] = await Promise.all([
+        api<{ balances: Array<Record<string, unknown>> }>(`/api/stocks?${stockParams}`),
+        includeMovements
+          ? api<{ movements: Array<Record<string, unknown>> }>(
+              `/api/stocks/movements?${movementParams}`
+            )
+          : Promise.resolve({ movements: [] as Array<Record<string, unknown>> }),
+      ]);
 
       const stock = filterByCategory(
-        data.balances.map((b) => {
+        stockData.balances.map((b) => {
           const inv = b.inventoryItem as { name: string; unit: string };
           return {
             name: `${inv.name} (${formatUnit(inv.unit)})`,
@@ -118,7 +223,7 @@ export default function StocksPage() {
 
       let movementRows;
       if (includeMovements) {
-        const mapped = data.recentMovements.map((m) => {
+        const mapped = movementData.movements.map((m) => {
           const inv = m.inventoryItem as { name: string };
           return {
             date: m.createdAt as string,
@@ -173,13 +278,13 @@ export default function StocksPage() {
       </div>
 
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-3">
-        <BranchSelector value={branchId} onChange={setBranchId} className="w-48" />
+        <BranchSelector value={branchId} onChange={(id) => { setBranchId(id); setPage(1); }} className="w-48" />
         <div className="flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button
               key={t.key}
               type="button"
-              onClick={() => setTab(t.key)}
+              onClick={() => { setTab(t.key); setPage(1); }}
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm",
                 tab === t.key ? "bg-primary text-white" : "bg-slate-100"
@@ -192,7 +297,7 @@ export default function StocksPage() {
         <Input
           placeholder="Search name or sub-heading..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="w-56"
         />
         <Select value={month} onChange={(e) => setMonth(e.target.value)} className="w-32">
@@ -246,10 +351,46 @@ export default function StocksPage() {
                 })}
               </TBody>
             </Table>
+            {total > PAGE_SIZE && (
+              <div className="mt-3 flex justify-center gap-2">
+                <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                  Prev
+                </Button>
+                <span className="text-sm text-muted">
+                  Page {page} · {total} items
+                </span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={page * PAGE_SIZE >= total}
+                  onClick={() => setPage(page + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </Card>
 
           <Card title="Recent Movements">
-            <RecentMovementsTable movements={movements} />
+            {movementsLoading ? (
+              <p className="text-sm text-muted">Loading movements...</p>
+            ) : (
+              <>
+                <RecentMovementsTable movements={movements} />
+                {movementsHasMore && (
+                  <div className="mt-3 flex justify-center">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={loadingMoreMovements}
+                      onClick={() => loadMovements(movementsPage + 1, true)}
+                    >
+                      {loadingMoreMovements ? "Loading..." : "Load more"}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </Card>
         </>
       )}
