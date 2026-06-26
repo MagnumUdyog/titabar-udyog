@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireMasterListAccess } from "@/lib/auth";
 import { jsonOk, handleApiError, parsePagination } from "@/lib/api";
 import { logAudit } from "@/lib/stock";
 import { StockCategory } from "@prisma/client";
@@ -17,7 +17,7 @@ const createSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth();
+    await requireMasterListAccess();
     const { searchParams } = new URL(req.url);
     const { page, limit, skip } = parsePagination(searchParams);
     const search = searchParams.get("search") || "";
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth();
+    const user = await requireMasterListAccess();
     const body = createSchema.parse(await req.json());
     const item = await prisma.inventoryItem.create({
       data: {

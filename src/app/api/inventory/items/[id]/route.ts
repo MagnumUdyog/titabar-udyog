@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { AuthError, requireAuth } from "@/lib/auth";
+import { AuthError, requireMasterListAccess } from "@/lib/auth";
 import { jsonOk, handleApiError } from "@/lib/api";
 import { logAudit } from "@/lib/stock";
 import { z } from "zod";
@@ -19,7 +19,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAuth();
+    const user = await requireMasterListAccess();
     const { id } = await params;
     const body = updateSchema.parse(await req.json());
     if (body.moq !== undefined && user.role !== "ADMIN") {
@@ -42,7 +42,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAuth();
+    const user = await requireMasterListAccess();
     const { id } = await params;
     const item = await prisma.inventoryItem.update({
       where: { id },

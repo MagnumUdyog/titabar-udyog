@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import type { UserRole } from "@prisma/client";
 
 const SESSION_COOKIE = "titiabar_session";
+const MASTER_LIST_UNLOCK_COOKIE = "titiabar_master_list_unlock";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 export interface SessionUser {
@@ -69,6 +70,57 @@ export async function createSession(user: SessionUser) {
 export async function destroySession() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+  cookieStore.delete(MASTER_LIST_UNLOCK_COOKIE);
+}
+
+export async function hasMasterListAccess(user: SessionUser): Promise<boolean> {
+  if (user.role === "ADMIN") return true;
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get(MASTER_LIST_UNLOCK_COOKIE)?.value;
+  if (!token) return false;
+
+  try {
+    await jwtVerify(token, getSecret());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function setMasterListUnlockCookie() {
+  const token = await new SignJWT({ masterList: true })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${SESSION_MAX_AGE}s`)
+    .sign(getSecret());
+
+  const cookieStore = await cookies();
+  cookieStore.set(MASTER_LIST_UNLOCK_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: SESSION_MAX_AGE,
+    path: "/",
+  });
+}
+
+export async function unlockMasterListWithAdminPassword(
+  password: string
+): Promise<boolean> {
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", isActive: true },
+    select: { passwordHash: true },
+  });
+
+  for (const admin of admins) {
+    if (await verifyPassword(password, admin.passwordHash)) {
+      await setMasterListUnlockCookie();
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export const getSession = cache(async (): Promise<SessionUser | null> => {
@@ -114,6 +166,12 @@ export async function requireAdmin(): Promise<SessionUser> {
   const session = await requireAuth();
   if (session.role !== "ADMIN") throw new AuthError("Admin access required", 403);
   return session;
+}
+
+export async function requireMasterListAccess(): Promise<SessionUser> {
+  const session = await requireAuth();
+  if (await hasMasterListAccess(session)) return session;
+  throw new AuthError("Admin password required for Master List", 403);
 }
 
 export function assertBranchAccess(user: SessionUser, branchId: string) {

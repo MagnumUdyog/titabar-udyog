@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { api } from "@/lib/fetcher";
+import { api, ApiError } from "@/lib/fetcher";
 import { cn, formatUnit } from "@/lib/utils";
 
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
@@ -45,12 +45,42 @@ export default function InventoryPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, percent: 0 });
   const [isAdmin, setIsAdmin] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [masterListUnlocked, setMasterListUnlocked] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockError, setUnlockError] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
 
   useEffect(() => {
-    api<{ user: { role: string } }>("/api/auth/me").then((d) =>
-      setIsAdmin(d.user.role === "ADMIN")
-    );
+    api<{ user: { role: string }; masterListUnlocked: boolean }>("/api/auth/me")
+      .then((d) => {
+        setIsAdmin(d.user.role === "ADMIN");
+        setMasterListUnlocked(d.masterListUnlocked);
+      })
+      .finally(() => setAuthReady(true));
   }, []);
+
+  const canViewMasterList = isAdmin || masterListUnlocked;
+
+  const handleUnlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUnlockError("");
+    setUnlocking(true);
+    try {
+      await api("/api/auth/master-list-unlock", {
+        method: "POST",
+        body: JSON.stringify({ password: unlockPassword }),
+      });
+      setMasterListUnlocked(true);
+      setUnlockPassword("");
+    } catch (err) {
+      setUnlockError(
+        err instanceof ApiError ? err.message : "Incorrect admin password"
+      );
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,8 +98,9 @@ export default function InventoryPage() {
   }, [tab, search, page]);
 
   useEffect(() => {
+    if (!canViewMasterList) return;
     load();
-  }, [load]);
+  }, [load, canViewMasterList]);
 
   const saveItem = async () => {
     if (modal === "add") {
@@ -228,6 +259,44 @@ export default function InventoryPage() {
     }
   };
 
+  if (!authReady) {
+    return <p className="text-sm text-muted">Loading...</p>;
+  }
+
+  if (!canViewMasterList) {
+    return (
+      <div className="mx-auto flex max-w-sm flex-col items-center justify-center py-16">
+        <div className="w-full rounded-lg border border-border bg-white p-6 shadow-sm">
+          <h1 className="text-center text-xl font-bold">Master List</h1>
+          <p className="mt-2 text-center text-sm text-muted">
+            Enter the admin password to open the master list.
+          </p>
+          <form onSubmit={handleUnlock} className="mt-6 space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted">
+                Admin password
+              </label>
+              <Input
+                type="password"
+                value={unlockPassword}
+                onChange={(e) => setUnlockPassword(e.target.value)}
+                autoFocus
+                required
+                placeholder="Enter admin password"
+              />
+            </div>
+            {unlockError && (
+              <p className="text-sm text-red-600">{unlockError}</p>
+            )}
+            <Button type="submit" className="w-full" disabled={unlocking}>
+              {unlocking ? "Verifying..." : "Unlock Master List"}
+            </Button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -236,9 +305,11 @@ export default function InventoryPage() {
           <p className="text-sm text-muted">{total} items</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => { setModal("import"); setImportResult(""); setImportErrors([]); }}>
-            Import Excel
-          </Button>
+          {isAdmin && (
+            <Button variant="secondary" onClick={() => { setModal("import"); setImportResult(""); setImportErrors([]); }}>
+              Import Excel
+            </Button>
+          )}
           <Button onClick={() => { setModal("add"); setEditItem({ category: "TRADING_ITEM", subHeading: "GENERAL", moq: 0 }); }}>
             Add Item
           </Button>
