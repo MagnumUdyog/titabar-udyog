@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import { api, ApiError } from "@/lib/fetcher";
 import { cn } from "@/lib/utils";
+import { modalFieldKeyDown, setModalFieldRef } from "@/lib/modal-field-nav";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 
 interface BranchUser {
@@ -477,14 +478,22 @@ function AdminEditFields({
   passwordError: string;
   onChange: (patch: Partial<CredentialsForm>) => void;
 }) {
+  const fieldRefs = useRef<Array<HTMLInputElement | HTMLButtonElement | null>>([]);
+  const fieldKeyDown = useCallback(
+    (index: number) => (e: React.KeyboardEvent) => modalFieldKeyDown(e, fieldRefs.current, index),
+    []
+  );
+
   return (
     <div className="space-y-5">
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Phone</p>
         <Input
+          ref={(el) => setModalFieldRef(fieldRefs.current, 0, el)}
           placeholder="Phone"
           value={form.phone}
           onChange={(e) => onChange({ phone: e.target.value })}
+          onKeyDown={fieldKeyDown(0)}
         />
       </div>
       <LoginCredentialsFields
@@ -494,6 +503,8 @@ function AdminEditFields({
         confirmPassword={form.confirmPassword}
         passwordError={passwordError}
         onChange={onChange}
+        fieldRefs={fieldRefs}
+        fieldStartIndex={1}
       />
     </div>
   );
@@ -506,6 +517,8 @@ function LoginCredentialsFields({
   confirmPassword,
   passwordError,
   onChange,
+  fieldRefs: externalFieldRefs,
+  fieldStartIndex = 0,
 }: {
   mode: "add" | "edit";
   username: string;
@@ -513,7 +526,20 @@ function LoginCredentialsFields({
   confirmPassword: string;
   passwordError: string;
   onChange: (patch: Partial<CredentialsForm>) => void;
+  fieldRefs?: React.MutableRefObject<Array<HTMLInputElement | HTMLButtonElement | null>>;
+  fieldStartIndex?: number;
 }) {
+  const localFieldRefs = useRef<Array<HTMLInputElement | HTMLButtonElement | null>>([]);
+  const fieldRefs = externalFieldRefs ?? localFieldRefs;
+  const fieldKeyDown = useCallback(
+    (index: number) => (e: React.KeyboardEvent) => modalFieldKeyDown(e, fieldRefs.current, index),
+    [fieldRefs]
+  );
+
+  const usernameIndex = fieldStartIndex;
+  const passwordIndex = fieldStartIndex + 1;
+  const confirmIndex = fieldStartIndex + 2;
+
   return (
     <div>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -521,21 +547,27 @@ function LoginCredentialsFields({
       </p>
       <div className="space-y-3">
         <Input
+          ref={(el) => setModalFieldRef(fieldRefs.current, usernameIndex, el)}
           placeholder={mode === "add" ? "Initial Username" : "Username / Name"}
           value={username}
           onChange={(e) => onChange({ username: e.target.value })}
+          onKeyDown={fieldKeyDown(usernameIndex)}
         />
         <Input
+          ref={(el) => setModalFieldRef(fieldRefs.current, passwordIndex, el)}
           type="password"
           placeholder={mode === "add" ? "Initial Password" : "New Password"}
           value={password}
           onChange={(e) => onChange({ password: e.target.value })}
+          onKeyDown={fieldKeyDown(passwordIndex)}
         />
         <Input
+          ref={(el) => setModalFieldRef(fieldRefs.current, confirmIndex, el)}
           type="password"
           placeholder="Confirm Password"
           value={confirmPassword}
           onChange={(e) => onChange({ confirmPassword: e.target.value })}
+          onKeyDown={fieldKeyDown(confirmIndex)}
         />
         {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
         {mode === "edit" && (
@@ -557,6 +589,12 @@ function BranchFormFields({
   passwordError: string;
   onChange: (patch: Partial<BranchForm>) => void;
 }) {
+  const fieldRefs = useRef<Array<HTMLInputElement | HTMLButtonElement | null>>([]);
+  const fieldKeyDown = useCallback(
+    (index: number) => (e: React.KeyboardEvent) => modalFieldKeyDown(e, fieldRefs.current, index),
+    []
+  );
+
   return (
     <div className="space-y-5">
       <div>
@@ -565,20 +603,26 @@ function BranchFormFields({
         </p>
         <div className="space-y-3">
           <Input
+            ref={(el) => setModalFieldRef(fieldRefs.current, 0, el)}
             placeholder="Branch Name"
             value={form.name}
             onChange={(e) => onChange({ name: e.target.value })}
+            onKeyDown={fieldKeyDown(0)}
           />
           <Input
+            ref={(el) => setModalFieldRef(fieldRefs.current, 1, el)}
             placeholder="Phone"
             value={form.phone}
             onChange={(e) => onChange({ phone: e.target.value })}
+            onKeyDown={fieldKeyDown(1)}
           />
           <Input
+            ref={(el) => setModalFieldRef(fieldRefs.current, 2, el)}
             placeholder="Branch Code (e.g. MAIN)"
             value={form.code}
             readOnly={mode === "edit"}
             onChange={(e) => onChange({ code: e.target.value.toUpperCase() })}
+            onKeyDown={fieldKeyDown(2)}
             className={cn(mode === "edit" && "bg-slate-50 text-muted")}
           />
         </div>
@@ -591,6 +635,8 @@ function BranchFormFields({
         confirmPassword={form.confirmPassword}
         passwordError={passwordError}
         onChange={onChange}
+        fieldRefs={fieldRefs}
+        fieldStartIndex={3}
       />
 
       {mode === "edit" && (
@@ -598,8 +644,10 @@ function BranchFormFields({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Status</p>
           <div className="flex gap-2">
             <button
+              ref={(el) => setModalFieldRef(fieldRefs.current, 6, el)}
               type="button"
               onClick={() => onChange({ isActive: true })}
+              onKeyDown={fieldKeyDown(6)}
               className={cn(
                 "rounded-md px-4 py-2 text-sm font-medium",
                 form.isActive ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
@@ -608,8 +656,10 @@ function BranchFormFields({
               Active
             </button>
             <button
+              ref={(el) => setModalFieldRef(fieldRefs.current, 7, el)}
               type="button"
               onClick={() => onChange({ isActive: false })}
+              onKeyDown={fieldKeyDown(7)}
               className={cn(
                 "rounded-md px-4 py-2 text-sm font-medium",
                 !form.isActive ? "bg-primary text-white" : "bg-slate-100 text-slate-700"
