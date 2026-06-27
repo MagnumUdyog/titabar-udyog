@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/fetcher";
 
 export interface InventorySearchItem {
@@ -204,9 +205,12 @@ export function ItemSearchInput({
 
       {showDropdown && (
         <ul className="absolute z-20 mt-0.5 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
-          {loading && (
-            <li className="px-3 py-2 text-sm text-muted">Searching...</li>
-          )}
+          {loading &&
+            Array.from({ length: 4 }).map((_, i) => (
+              <li key={i} className="px-3 py-2">
+                <Skeleton className="h-4 w-full" />
+              </li>
+            ))}
           {!loading && suggestions.length === 0 && (
             <li className="px-3 py-2 text-sm text-muted">No items found</li>
           )}

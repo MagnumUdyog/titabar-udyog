@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { api, ApiError } from "@/lib/fetcher";
 import { cn, formatUnit } from "@/lib/utils";
+import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
 type TabKey = Category | "ALL";
@@ -260,7 +261,27 @@ export default function InventoryPage() {
   };
 
   if (!authReady) {
-    return <p className="text-sm text-muted">Loading...</p>;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-10 w-full max-w-xl" />
+        <Card>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Heading</TH>
+                <TH>Sub-Heading</TH>
+                <TH>Item Name</TH>
+                <TH>Unit</TH>
+                <TH>MOQ</TH>
+                <TH>Actions</TH>
+              </TR>
+            </THead>
+            <SkeletonTable rows={8} cols={6} />
+          </Table>
+        </Card>
+      </div>
+    );
   }
 
   if (!canViewMasterList) {
@@ -341,20 +362,20 @@ export default function InventoryPage() {
       </div>
 
       <Card>
-        {loading ? (
-          <p className="text-sm text-muted">Loading...</p>
-        ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Heading</TH>
-                <TH>Sub-heading</TH>
-                <TH>Item Name</TH>
-                <TH>Unit</TH>
-                <TH>MOQ</TH>
-                <TH>Actions</TH>
-              </TR>
-            </THead>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Heading</TH>
+              <TH>Sub-heading</TH>
+              <TH>Item Name</TH>
+              <TH>Unit</TH>
+              <TH>MOQ</TH>
+              <TH>Actions</TH>
+            </TR>
+          </THead>
+          {loading ? (
+            <SkeletonTable rows={8} cols={6} />
+          ) : (
             <TBody>
               {items.map((item) => (
                 <TR key={item.id}>
@@ -404,9 +425,9 @@ export default function InventoryPage() {
                 </TR>
               ))}
             </TBody>
-          </Table>
-        )}
-        {total > 50 && (
+          )}
+        </Table>
+        {!loading && total > 50 && (
           <div className="mt-3 flex justify-center gap-2">
             <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Prev</Button>
             <span className="text-sm text-muted">Page {page}</span>

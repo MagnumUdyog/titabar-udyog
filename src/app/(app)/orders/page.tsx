@@ -11,6 +11,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { BranchSelector } from "@/components/branch-selector";
 import { api } from "@/lib/fetcher";
+import { SkeletonTable } from "@/components/ui/skeleton";
 
 interface Order {
   id: string;
@@ -124,23 +125,29 @@ export default function OrdersPage() {
       </div>
 
       <Card>
-        {loading ? (
-          <p className="text-sm text-muted">Loading...</p>
-        ) : orders.length === 0 ? (
-          <p className="text-sm text-muted">No orders found</p>
-        ) : (
-          <Table>
-            <THead>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Order #</TH>
+              <TH>Branch</TH>
+              <TH>Customer</TH>
+              <TH>Status</TH>
+              <TH>Items</TH>
+              <TH>Date</TH>
+              <TH>Actions</TH>
+            </TR>
+          </THead>
+          {loading ? (
+            <SkeletonTable rows={8} cols={7} />
+          ) : orders.length === 0 ? (
+            <tbody>
               <TR>
-                <TH>Order #</TH>
-                <TH>Branch</TH>
-                <TH>Customer</TH>
-                <TH>Status</TH>
-                <TH>Items</TH>
-                <TH>Date</TH>
-                <TH>Actions</TH>
+                <TD colSpan={7} className="text-muted">
+                  No orders found
+                </TD>
               </TR>
-            </THead>
+            </tbody>
+          ) : (
             <TBody>
               {orders.map((o) => (
                 <TR
@@ -192,8 +199,8 @@ export default function OrdersPage() {
                 </TR>
               ))}
             </TBody>
-          </Table>
-        )}
+          )}
+        </Table>
       </Card>
     </div>
   );

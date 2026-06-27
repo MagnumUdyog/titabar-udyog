@@ -15,6 +15,8 @@ import { RecentMovementsTable } from "@/components/stocks/recent-movements-table
 import { BranchSelector } from "@/components/branch-selector";
 import { api, ApiError } from "@/lib/fetcher";
 import { cn } from "@/lib/utils";
+import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
+import { Table, THead, TR, TH } from "@/components/ui/table";
 
 type Direction = "IN" | "OUT";
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
@@ -484,7 +486,18 @@ function StockEntryContent() {
           </div>
           <Card title="Recent Movements">
             {movementsLoading ? (
-              <p className="text-sm text-muted">Loading movements...</p>
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Date</TH>
+                    <TH>Type</TH>
+                    <TH>Item</TH>
+                    <TH>Qty</TH>
+                    <TH>By</TH>
+                  </TR>
+                </THead>
+                <SkeletonTable rows={6} cols={5} />
+              </Table>
             ) : (
               <RecentMovementsTable movements={movements} />
             )}
@@ -495,9 +508,34 @@ function StockEntryContent() {
   );
 }
 
+function StockEntryPageSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-32" />
+      <Skeleton className="h-10 w-48" />
+      <div className="rounded-lg border border-border p-4">
+        <Skeleton className="mb-3 h-5 w-24" />
+        <Skeleton className="h-8 w-full" />
+      </div>
+      <Table>
+        <THead>
+          <TR>
+            <TH>Date</TH>
+            <TH>Type</TH>
+            <TH>Item</TH>
+            <TH>Qty</TH>
+            <TH>By</TH>
+          </TR>
+        </THead>
+        <SkeletonTable rows={6} cols={5} />
+      </Table>
+    </div>
+  );
+}
+
 export default function StockEntryPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-muted">Loading...</p>}>
+    <Suspense fallback={<StockEntryPageSkeleton />}>
       <StockEntryContent />
     </Suspense>
   );

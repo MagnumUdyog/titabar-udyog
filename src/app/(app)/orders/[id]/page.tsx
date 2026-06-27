@@ -9,22 +9,57 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/fetcher";
 import { formatQty, shortId } from "@/lib/utils";
+import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [order, setOrder] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    api<{ order: Record<string, unknown> }>(`/api/orders/${id}`).then((d) => setOrder(d.order));
+    setLoading(true);
+    api<{ order: Record<string, unknown> }>(`/api/orders/${id}`)
+      .then((d) => setOrder(d.order))
+      .finally(() => setLoading(false));
   }, [id]);
 
   const load = () => {
     api<{ order: Record<string, unknown> }>(`/api/orders/${id}`).then((d) => setOrder(d.order));
   };
 
-  if (!order) return <p className="text-sm text-muted">Loading...</p>;
+  const toast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 5000);
+  };
+
+  if (loading || !order) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-9 w-64" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+        <Card title="Order Items">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Item</TH>
+                <TH>Category</TH>
+                <TH>Qty</TH>
+              </TR>
+            </THead>
+            <SkeletonTable rows={5} cols={3} />
+          </Table>
+        </Card>
+      </div>
+    );
+  }
 
   const items = order.items as Array<Record<string, unknown>>;
   const reservations = order.reservations as Array<Record<string, unknown>>;
@@ -43,11 +78,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     const orderItem = r.orderItem as { itemNameSnapshot?: string } | undefined;
     const inv = r.inventoryItem as { name?: string } | undefined;
     return orderItem?.itemNameSnapshot || inv?.name || "Unknown item";
-  };
-
-  const toast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 5000);
   };
 
   const sendReceiptOnWhatsApp = async () => {

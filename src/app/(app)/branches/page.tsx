@@ -8,6 +8,7 @@ import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import { api, ApiError } from "@/lib/fetcher";
 import { cn } from "@/lib/utils";
+import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 
 interface BranchUser {
   id: string;
@@ -47,6 +48,7 @@ interface BranchForm {
 
 interface CredentialsForm {
   username: string;
+  phone: string;
   password: string;
   confirmPassword: string;
 }
@@ -63,6 +65,7 @@ const emptyForm = (): BranchForm => ({
 
 const emptyCredentials = (): CredentialsForm => ({
   username: "",
+  phone: "",
   password: "",
   confirmPassword: "",
 });
@@ -78,6 +81,7 @@ export default function BranchesPage() {
   const [passwordError, setPasswordError] = useState("");
   const [adminPasswordError, setAdminPasswordError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const toast = useCallback((msg: string) => {
@@ -86,12 +90,17 @@ export default function BranchesPage() {
   }, []);
 
   const load = async () => {
-    const [branchData, userData] = await Promise.all([
-      api<{ branches: Branch[] }>("/api/branches"),
-      api<{ users: AdminUser[] }>("/api/users"),
-    ]);
-    setBranches(branchData.branches);
-    setAdmins(userData.users.filter((u) => u.role === "ADMIN"));
+    setLoading(true);
+    try {
+      const [branchData, userData] = await Promise.all([
+        api<{ branches: Branch[] }>("/api/branches"),
+        api<{ users: AdminUser[] }>("/api/users"),
+      ]);
+      setBranches(branchData.branches);
+      setAdmins(userData.users.filter((u) => u.role === "ADMIN"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -134,6 +143,7 @@ export default function BranchesPage() {
     setAdminEditId(admin.id);
     setAdminForm({
       username: admin.name,
+      phone: admin.phone,
       password: "",
       confirmPassword: "",
     });
@@ -232,11 +242,17 @@ export default function BranchesPage() {
   };
 
   const saveAdminEdit = async () => {
+    const phone = adminForm.phone.trim();
+    if (phone.length < 10) {
+      setAdminPasswordError("Phone must be at least 10 digits");
+      return;
+    }
     if (!validatePasswords(adminForm, false, setAdminPasswordError)) return;
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
         name: adminForm.username.trim(),
+        phone,
       };
       if (adminForm.password) payload.password = adminForm.password;
 
@@ -279,6 +295,17 @@ export default function BranchesPage() {
     if (adminPasswordError) setAdminPasswordError("");
   };
 
+  const deleteBranch = async (branch: Branch) => {
+    if (!confirm(`Delete branch "${branch.name}"? This cannot be undone.`)) return;
+    try {
+      await api(`/api/branches/${branch.id}`, { method: "DELETE" });
+      setBranches((prev) => prev.filter((b) => b.id !== branch.id));
+      toast("Branch deleted successfully");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Failed to delete branch");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {toastMsg && (
@@ -306,24 +333,33 @@ export default function BranchesPage() {
                 <TH>Phone</TH>
                 <TH>Code</TH>
                 <TH>Status</TH>
-                <TH>Actions</TH>
+                <TH className="text-center">Actions</TH>
               </TR>
             </THead>
-            <TBody>
-              {branches.map((b) => (
+            {loading ? (
+              <SkeletonTable rows={4} cols={5} />
+            ) : (
+              <TBody>
+                {branches.map((b) => (
                 <TR key={b.id}>
                   <TD className="font-medium">{b.name}</TD>
                   <TD>{b.phone || "—"}</TD>
                   <TD>{b.code}</TD>
                   <TD>{b.isActive ? "Active" : "Inactive"}</TD>
-                  <TD>
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(b)}>
-                      Edit
-                    </Button>
+                  <TD className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(b)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => deleteBranch(b)}>
+                        Delete
+                      </Button>
+                    </div>
                   </TD>
                 </TR>
-              ))}
-            </TBody>
+                ))}
+              </TBody>
+            )}
           </Table>
         </Card>
       </div>
@@ -340,8 +376,11 @@ export default function BranchesPage() {
                 <TH>Actions</TH>
               </TR>
             </THead>
-            <TBody>
-              {admins.map((admin) => (
+            {loading ? (
+              <SkeletonTable rows={2} cols={3} />
+            ) : (
+              <TBody>
+                {admins.map((admin) => (
                 <TR key={admin.id}>
                   <TD className="font-medium">{admin.name}</TD>
                   <TD>{admin.phone}</TD>
@@ -351,8 +390,9 @@ export default function BranchesPage() {
                     </Button>
                   </TD>
                 </TR>
-              ))}
-            </TBody>
+                ))}
+              </TBody>
+            )}
           </Table>
         </Card>
       </div>
@@ -418,15 +458,43 @@ export default function BranchesPage() {
           </>
         }
       >
-        <LoginCredentialsFields
-          mode="edit"
-          username={adminForm.username}
-          password={adminForm.password}
-          confirmPassword={adminForm.confirmPassword}
+        <AdminEditFields
+          form={adminForm}
           passwordError={adminPasswordError}
           onChange={patchAdminForm}
         />
       </Modal>
+    </div>
+  );
+}
+
+function AdminEditFields({
+  form,
+  passwordError,
+  onChange,
+}: {
+  form: CredentialsForm;
+  passwordError: string;
+  onChange: (patch: Partial<CredentialsForm>) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Phone</p>
+        <Input
+          placeholder="Phone"
+          value={form.phone}
+          onChange={(e) => onChange({ phone: e.target.value })}
+        />
+      </div>
+      <LoginCredentialsFields
+        mode="edit"
+        username={form.username}
+        password={form.password}
+        confirmPassword={form.confirmPassword}
+        passwordError={passwordError}
+        onChange={onChange}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Package,
   Warehouse,
@@ -39,20 +39,21 @@ export function Sidebar({
   user: { name: string; role: string; branchId?: string | null; branchName?: string | null };
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [lowStockCount, setLowStockCount] = useState(0);
+  const [badgeLoading, setBadgeLoading] = useState(true);
 
   useEffect(() => {
+    setBadgeLoading(true);
     const params = user.branchId ? `?branchId=${user.branchId}` : "";
     api<{ count: number }>(`/api/notifications/low-stock${params}`)
       .then((d) => setLowStockCount(d.count))
-      .catch(() => setLowStockCount(0));
+      .catch(() => setLowStockCount(0))
+      .finally(() => setBadgeLoading(false));
   }, [user.branchId]);
 
   const handleLogout = async () => {
     await api("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    window.location.href = "/login";
   };
 
   const items = navItems.filter((item) => !item.adminOnly || user.role === "ADMIN");
@@ -78,7 +79,10 @@ export function Sidebar({
             {item.icon}
             <span className="flex flex-1 items-center">
               {item.label}
-              {item.href === "/notifications" && lowStockCount > 0 && (
+              {item.href === "/notifications" && badgeLoading && (
+                <span className="ml-2 inline-block h-4 w-6 animate-pulse rounded-full bg-gray-200" />
+              )}
+              {item.href === "/notifications" && !badgeLoading && lowStockCount > 0 && (
                 <span className="ml-2 rounded-full bg-red-600 px-1.5 py-px text-[11px] font-bold text-white">
                   {lowStockCount}
                 </span>

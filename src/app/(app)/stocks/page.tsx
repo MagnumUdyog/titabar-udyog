@@ -22,6 +22,7 @@ import {
   type ReportCategory,
 } from "@/lib/stock-report-pdf";
 import { cn, formatQty, formatUnit } from "@/lib/utils";
+import { SkeletonTable } from "@/components/ui/skeleton";
 
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
 type TabKey = Category | "ALL";
@@ -313,8 +314,6 @@ export default function StocksPage() {
 
       {!branchId ? (
         <Card><p className="text-sm text-muted">Select a branch to view stock</p></Card>
-      ) : loading ? (
-        <p className="text-sm text-muted">Loading...</p>
       ) : (
         <>
           <Card title="Current Stock">
@@ -330,8 +329,11 @@ export default function StocksPage() {
                   <TH>Low Stock</TH>
                 </TR>
               </THead>
-              <TBody>
-                {balances.map((b) => {
+              {loading ? (
+                <SkeletonTable rows={10} cols={7} />
+              ) : (
+                <TBody>
+                  {balances.map((b) => {
                   const inv = b.inventoryItem as { name: string; unit: string };
                   const available = Number(b.availableQty);
                   const moq = Number(b.moq ?? (b.inventoryItem as { moq?: number }).moq ?? 0);
@@ -349,9 +351,10 @@ export default function StocksPage() {
                     </TR>
                   );
                 })}
-              </TBody>
+                </TBody>
+              )}
             </Table>
-            {total > PAGE_SIZE && (
+            {!loading && total > PAGE_SIZE && (
               <div className="mt-3 flex justify-center gap-2">
                 <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>
                   Prev
@@ -373,7 +376,18 @@ export default function StocksPage() {
 
           <Card title="Recent Movements">
             {movementsLoading ? (
-              <p className="text-sm text-muted">Loading movements...</p>
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Date</TH>
+                    <TH>Type</TH>
+                    <TH>Item</TH>
+                    <TH>Qty</TH>
+                    <TH>By</TH>
+                  </TR>
+                </THead>
+                <SkeletonTable rows={6} cols={5} />
+              </Table>
             ) : (
               <>
                 <RecentMovementsTable movements={movements} />

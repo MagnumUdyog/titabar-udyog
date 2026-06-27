@@ -43,7 +43,6 @@ export default function LoginPage() {
               type="text"
               value={login}
               onChange={(e) => setLogin(e.target.value)}
-              placeholder="Branch 2 or 9876543211"
               autoComplete="username"
               required
             />

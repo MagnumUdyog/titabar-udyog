@@ -13,6 +13,7 @@ import {
 } from "@/components/orders/item-search-input";
 import { api, ApiError } from "@/lib/fetcher";
 import { cn, formatQty } from "@/lib/utils";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import type { LowStockItem } from "@/lib/stock";
 
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
@@ -283,7 +284,11 @@ export default function NotificationsPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted">Loading...</p>
+        <div className="space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
       ) : filteredItems.length === 0 ? (
         <div className="py-16 text-center text-gray-400">
           <div className="mb-3 text-4xl">✅</div>

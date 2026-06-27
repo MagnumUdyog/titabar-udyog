@@ -7,7 +7,7 @@ import type { UserRole } from "@prisma/client";
 
 const SESSION_COOKIE = "titiabar_session";
 const MASTER_LIST_UNLOCK_COOKIE = "titiabar_master_list_unlock";
-const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 export interface SessionUser {
   id: string;
@@ -108,7 +108,7 @@ export async function createSession(user: SessionUser) {
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_MAX_AGE}s`)
+    .setExpirationTime("30d")
     .sign(getSecret());
 
   const cookieStore = await cookies();
@@ -146,7 +146,7 @@ async function setMasterListUnlockCookie() {
   const token = await new SignJWT({ masterList: true })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_MAX_AGE}s`)
+    .setExpirationTime("30d")
     .sign(getSecret());
 
   const cookieStore = await cookies();
