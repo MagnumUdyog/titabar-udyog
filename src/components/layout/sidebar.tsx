@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Package,
   Warehouse,
   ShoppingCart,
-  Building2,
-  Users,
+  Settings,
   LogOut,
   FileSpreadsheet,
   ArrowDownUp,
@@ -16,7 +15,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
-import { useRouter } from "next/navigation";
 
 interface NavItem {
   href: string;
@@ -32,8 +30,7 @@ const navItems: NavItem[] = [
   { href: "/stocks", label: "Stock Status", icon: <Warehouse size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
   { href: "/inventory", label: "Master List", icon: <Package size={18} /> },
-  { href: "/branches", label: "Branches", icon: <Building2 size={18} />, adminOnly: true },
-  { href: "/users", label: "Users", icon: <Users size={18} />, adminOnly: true },
+  { href: "/branches", label: "Settings", icon: <Settings size={18} />, adminOnly: true },
 ];
 
 export function Sidebar({

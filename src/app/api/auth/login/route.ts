@@ -1,34 +1,25 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/db";
-import { createSession, verifyPassword, normalizePhone } from "@/lib/auth";
+import { createSession, verifyPassword, findUserByLogin } from "@/lib/auth";
 import { jsonOk, jsonError, handleApiError } from "@/lib/api";
 import { logAudit } from "@/lib/stock";
 import { z } from "zod";
 
 const schema = z.object({
-  phone: z.string().min(10),
+  login: z.string().min(1),
   password: z.string().min(4),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const body = schema.parse(await req.json());
-    const phone = normalizePhone(body.phone);
-    if (phone.length < 10) {
-      return jsonError("Invalid phone or password", 401);
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { phone },
-      include: { branch: true },
-    });
+    const user = await findUserByLogin(body.login);
 
     if (!user || !user.isActive) {
-      return jsonError("Invalid phone or password", 401);
+      return jsonError("Invalid phone/name or password", 401);
     }
 
     const valid = await verifyPassword(body.password, user.passwordHash);
-    if (!valid) return jsonError("Invalid phone or password", 401);
+    if (!valid) return jsonError("Invalid phone/name or password", 401);
 
     const sessionUser = {
       id: user.id,

@@ -8,7 +8,7 @@ import { api } from "@/lib/fetcher";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [phone, setPhone] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ export default function LoginPage() {
     try {
       await api("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ phone, password }),
+        body: JSON.stringify({ login: login.trim(), password }),
       });
       router.push("/admin/stock-entry");
       router.refresh();
@@ -38,13 +38,13 @@ export default function LoginPage() {
         <p className="mb-6 text-sm text-muted">Sign in to your account</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium">Phone</label>
+            <label className="mb-1 block text-xs font-medium">Phone / Name</label>
             <Input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-              placeholder="9999999999"
-              inputMode="numeric"
+              type="text"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="Branch 2 or 9876543211"
+              autoComplete="username"
               required
             />
           </div>

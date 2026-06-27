@@ -3,6 +3,7 @@ export async function api<T = unknown>(
   options?: RequestInit
 ): Promise<T> {
   const res = await fetch(url, {
+    cache: "no-store",
     ...options,
     headers: {
       "Content-Type": "application/json",

@@ -44,6 +44,60 @@ export function normalizePhone(phone: string): string {
   return digits.slice(-10);
 }
 
+export async function findUserByLogin(login: string) {
+  const trimmed = login.trim();
+  if (!trimmed) return null;
+
+  const digits = normalizePhone(trimmed);
+
+  if (digits.length >= 10) {
+    const byPhone = await prisma.user.findUnique({
+      where: { phone: digits },
+      include: { branch: true },
+    });
+    if (byPhone?.isActive) return byPhone;
+  }
+
+  const byUserName = await prisma.user.findFirst({
+    where: {
+      name: { equals: trimmed, mode: "insensitive" },
+      isActive: true,
+    },
+    include: { branch: true },
+  });
+  if (byUserName) return byUserName;
+
+  const byBranchName = await prisma.user.findFirst({
+    where: {
+      role: "BRANCH_USER",
+      isActive: true,
+      branch: {
+        name: { equals: trimmed, mode: "insensitive" },
+        isActive: true,
+      },
+    },
+    include: { branch: true },
+  });
+  if (byBranchName) return byBranchName;
+
+  if (digits.length >= 10) {
+    const byBranchPhone = await prisma.user.findFirst({
+      where: {
+        role: "BRANCH_USER",
+        isActive: true,
+        branch: {
+          phone: digits,
+          isActive: true,
+        },
+      },
+      include: { branch: true },
+    });
+    if (byBranchPhone) return byBranchPhone;
+  }
+
+  return null;
+}
+
 export async function createSession(user: SessionUser) {
   const token = await new SignJWT({
     id: user.id,
