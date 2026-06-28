@@ -105,9 +105,12 @@ export default function NewOrderPage() {
   const recentOrdersRef = useRef<HTMLDivElement>(null);
   const phoneCache = useRef(new Map<string, CustomerData>());
   const draftHydrated = useRef(false);
+  const submitLockRef = useRef(false);
 
   const [branchId, setBranchId] = useState("");
   const [showBranchField, setShowBranchField] = useState(false);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
@@ -165,6 +168,7 @@ export default function NewOrderPage() {
   useEffect(() => {
     api<{ user: { role: string; branchId: string | null } }>("/api/auth/me").then((d) => {
       setShowBranchField(d.user.role === "ADMIN");
+      setUserBranchId(d.user.branchId);
       const draft = loadCreateOrderDraft();
       if (draft) {
         if (d.user.role === "ADMIN") {
@@ -187,6 +191,7 @@ export default function NewOrderPage() {
         setBranchId(d.user.branchId);
       }
       draftHydrated.current = true;
+      setAuthReady(true);
     });
   }, [loadCustomerOrders]);
 
@@ -578,19 +583,50 @@ export default function NewOrderPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [itemNotFound]);
 
-  const submitOrder = async (forceCreate = false) => {
+  const effectiveBranchId = showBranchField ? branchId : branchId || userBranchId || "";
+  const pendingItemName = selectedItem?.name ?? itemQuery.trim();
+  const pendingQty = parseInt(qty, 10);
+  const hasPendingLine = Boolean(pendingItemName && pendingQty > 0);
+  const canCreateOrder =
+    authReady && Boolean(effectiveBranchId) && (lines.length > 0 || hasPendingLine) && !submitting;
+
+  const buildSubmissionLines = (): OrderLine[] => {
+    if (!hasPendingLine) return lines;
+    const isUnverified = unverified || !selectedItem;
+    return [
+      ...lines,
+      {
+        inventoryItemId: selectedItem?.id,
+        name: pendingItemName,
+        unit: activeUnit ?? "",
+        category: activeCategory || "TRADING_ITEM",
+        quantity: pendingQty,
+        unverified: isUnverified,
+        savedName: pendingItemName,
+        savedQty: pendingQty,
+        savedInventoryItemId: selectedItem?.id,
+        savedUnverified: isUnverified,
+      },
+    ];
+  };
+
+  const submitOrder = async (
+    submissionLines: OrderLine[],
+    resolvedBranchId: string,
+    includedPendingLine: boolean
+  ) => {
     setSubmitting(true);
     try {
+      const normalizedPhone = customerPhone.replace(/\D/g, "").slice(-10);
       const data = await api<{ order: { id: string } }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
-          branchId,
-          customerName,
-          customerPhone,
-          customerAddress,
+          branchId: resolvedBranchId,
+          customerName: customerName.trim(),
+          customerPhone: normalizedPhone,
+          customerAddress: customerAddress.trim(),
           status: "PENDING",
-          forceCreate,
-          items: lines.map((l) => ({
+          items: submissionLines.map((l) => ({
             inventoryItemId: l.inventoryItemId,
             itemName: l.unverified || !l.inventoryItemId ? l.name : undefined,
             category: l.category,
@@ -599,18 +635,26 @@ export default function NewOrderPage() {
         }),
       });
       clearCreateOrderDraft();
+      if (includedPendingLine) clearAddRow();
       router.push(`/orders/${data.order.id}`);
+      router.refresh();
     } catch (err) {
       if (err instanceof ApiError) setFormError(err.message);
     } finally {
       setSubmitting(false);
+      submitLockRef.current = false;
     }
   };
 
   const handleCreateOrder = async () => {
+    if (submitLockRef.current || submitting) return;
     setFormError(null);
-    if (!branchId) {
-      setFormError("Select a branch");
+
+    if (!authReady) return;
+
+    if (!effectiveBranchId) {
+      setFormError(showBranchField ? "Select a branch" : "Branch is still loading");
+      if (showBranchField) focus(branchRef);
       return;
     }
     if (!customerName.trim()) {
@@ -618,18 +662,26 @@ export default function NewOrderPage() {
       focus(nameRef);
       return;
     }
-    if (customerPhone.trim().length < 10) {
+    const phoneDigits = customerPhone.replace(/\D/g, "");
+    if (phoneDigits.length < 10) {
       setFormError("Valid phone number is required");
       focus(phoneRef);
       return;
     }
-    if (lines.length === 0) {
+
+    const submissionLines = buildSubmissionLines();
+    if (submissionLines.length === 0) {
       setFormError("Add at least one item");
       focus(itemRef);
       return;
     }
 
-    await submitOrder(false);
+    submitLockRef.current = true;
+    await submitOrder(
+      submissionLines,
+      effectiveBranchId,
+      submissionLines.length > lines.length
+    );
   };
 
   return (
@@ -1105,12 +1157,13 @@ export default function NewOrderPage() {
 
       <div className="flex justify-end gap-2">
         <Button
-          onClick={handleCreateOrder}
-          disabled={submitting || lines.length === 0}
+          type="button"
+          onClick={() => void handleCreateOrder()}
+          disabled={!canCreateOrder}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              handleCreateOrder();
+              void handleCreateOrder();
             }
           }}
         >
