@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
-import { createSession, verifyPassword, findUserByLogin } from "@/lib/auth";
+import { createSession, verifyLoginPassword, findUserByLogin } from "@/lib/auth";
 import { jsonOk, jsonError, handleApiError } from "@/lib/api";
 import { logAudit } from "@/lib/stock";
 import { z } from "zod";
 
 const schema = z.object({
   login: z.string().min(1),
-  password: z.string().min(4),
+  password: z.string().min(1),
 });
 
 export async function POST(req: NextRequest) {
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       return jsonError("Invalid phone/name or password", 401);
     }
 
-    const valid = await verifyPassword(body.password, user.passwordHash);
+    const valid = await verifyLoginPassword(body.password, user.passwordHash);
     if (!valid) return jsonError("Invalid phone/name or password", 401);
 
     const sessionUser = {
