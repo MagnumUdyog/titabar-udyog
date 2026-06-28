@@ -55,7 +55,13 @@ export async function middleware(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const response = NextResponse.redirect(new URL("/login", request.url));
-    response.cookies.delete("titiabar_session");
+    response.cookies.set("titiabar_session", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    });
     return response;
   }
 }

@@ -1,7 +1,8 @@
-import { destroySession } from "@/lib/auth";
+import { clearSessionCookies } from "@/lib/auth";
 import { jsonOk } from "@/lib/api";
 
 export async function POST() {
-  await destroySession();
-  return jsonOk({ success: true });
+  const response = jsonOk({ success: true });
+  clearSessionCookies(response);
+  return response;
 }

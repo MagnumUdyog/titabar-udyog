@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { createSession, verifyLoginPassword, findUserByLogin } from "@/lib/auth";
-import { jsonOk, jsonError, handleApiError } from "@/lib/api";
+import { jsonOkWithSession, verifyLoginPassword, findUserByLogin } from "@/lib/auth";
+import { jsonError, handleApiError } from "@/lib/api";
 import { logAudit } from "@/lib/stock";
 import { z } from "zod";
 
@@ -30,14 +30,13 @@ export async function POST(req: NextRequest) {
       branchName: user.branch?.name ?? null,
     };
 
-    await createSession(sessionUser);
     try {
       await logAudit(user.id, "LOGIN", "User", user.id, user.branchId ?? undefined);
     } catch {
       // Login should succeed even if audit logging fails
     }
 
-    return jsonOk({ user: sessionUser });
+    return jsonOkWithSession(sessionUser);
   } catch (error) {
     return handleApiError(error);
   }

@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/fetcher";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,11 +20,9 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ login: login.trim(), password }),
       });
-      router.push("/admin/stock-entry");
-      router.refresh();
+      window.location.href = "/admin/stock-entry";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
-    } finally {
       setLoading(false);
     }
   };

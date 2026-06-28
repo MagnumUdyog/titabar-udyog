@@ -4,6 +4,7 @@ export async function api<T = unknown>(
 ): Promise<T> {
   const res = await fetch(url, {
     cache: "no-store",
+    credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",

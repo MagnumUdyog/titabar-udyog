@@ -24,6 +24,16 @@ export function handleApiError(error: unknown) {
     return jsonError(formatZodError(error), 400, { details: error.flatten() });
   }
 
+  if (
+    error instanceof Error &&
+    error.message.includes("SESSION_SECRET must be set")
+  ) {
+    return jsonError(
+      "Server misconfigured: SESSION_SECRET is missing. Add it in your hosting environment variables.",
+      503
+    );
+  }
+
   const databaseUrl = process.env.DATABASE_URL?.trim();
   const databaseMissing =
     !databaseUrl ||

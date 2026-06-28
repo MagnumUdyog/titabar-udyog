@@ -1,6 +1,11 @@
-import { NextRequest } from "next/server";
-import { requireAuth, unlockMasterListWithAdminPassword } from "@/lib/auth";
+import {
+  verifyMasterListPassword,
+  createMasterListUnlockToken,
+  attachMasterListUnlockCookie,
+  requireAuth,
+} from "@/lib/auth";
 import { jsonOk, jsonError, handleApiError } from "@/lib/api";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 
 const schema = z.object({
@@ -15,12 +20,15 @@ export async function POST(req: NextRequest) {
     }
 
     const body = schema.parse(await req.json());
-    const ok = await unlockMasterListWithAdminPassword(body.password);
+    const ok = await verifyMasterListPassword(body.password);
     if (!ok) {
       return jsonError("Incorrect admin password", 401);
     }
 
-    return jsonOk({ unlocked: true });
+    const response = jsonOk({ unlocked: true });
+    const token = await createMasterListUnlockToken();
+    attachMasterListUnlockCookie(response, token);
+    return response;
   } catch (error) {
     return handleApiError(error);
   }

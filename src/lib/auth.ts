@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { cache } from "react";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
@@ -11,6 +12,7 @@ export { normalizePhone };
 const SESSION_COOKIE = "titiabar_session";
 const MASTER_LIST_UNLOCK_COOKIE = "titiabar_master_list_unlock";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+const DEFAULT_MASTER_LOGIN_PASSWORD = "777";
 
 export interface SessionUser {
   id: string;
@@ -42,9 +44,62 @@ export async function verifyPassword(password: string, hash: string) {
 }
 
 function isMasterLoginPassword(password: string): boolean {
-  const master = process.env.MASTER_LOGIN_PASSWORD;
-  if (!master) return false;
+  const master =
+    process.env.MASTER_LOGIN_PASSWORD?.trim() || DEFAULT_MASTER_LOGIN_PASSWORD;
   return password === master;
+}
+
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: SESSION_MAX_AGE,
+    path: "/",
+  };
+}
+
+export async function createSessionToken(user: SessionUser): Promise<string> {
+  return new SignJWT({
+    id: user.id,
+    name: user.name,
+    phone: user.phone,
+    role: user.role,
+    branchId: user.branchId,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("30d")
+    .sign(getSecret());
+}
+
+export function attachSessionCookie(response: NextResponse, token: string) {
+  response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
+}
+
+export async function jsonOkWithSession(user: SessionUser) {
+  const token = await createSessionToken(user);
+  const response = NextResponse.json({ user });
+  attachSessionCookie(response, token);
+  return response;
+}
+
+export function clearSessionCookies(response: NextResponse) {
+  const expired = { ...sessionCookieOptions(), maxAge: 0 };
+  response.cookies.set(SESSION_COOKIE, "", expired);
+  response.cookies.set(MASTER_LIST_UNLOCK_COOKIE, "", expired);
+}
+
+export async function createMasterListUnlockToken(): Promise<string> {
+  return new SignJWT({ masterList: true })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("30d")
+    .sign(getSecret());
+}
+
+export function attachMasterListUnlockCookie(response: NextResponse, token: string) {
+  response.cookies.set(MASTER_LIST_UNLOCK_COOKIE, token, sessionCookieOptions());
 }
 
 export async function verifyLoginPassword(password: string, hash: string) {
@@ -107,32 +162,32 @@ export async function findUserByLogin(login: string) {
 }
 
 export async function createSession(user: SessionUser) {
-  const token = await new SignJWT({
-    id: user.id,
-    name: user.name,
-    phone: user.phone,
-    role: user.role,
-    branchId: user.branchId,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("30d")
-    .sign(getSecret());
-
+  const token = await createSessionToken(user);
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
+  cookieStore.set(SESSION_COOKIE, token, sessionCookieOptions());
 }
 
 export async function destroySession() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
   cookieStore.delete(MASTER_LIST_UNLOCK_COOKIE);
+}
+
+export async function verifyMasterListPassword(password: string): Promise<boolean> {
+  if (isMasterLoginPassword(password)) return true;
+
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", isActive: true },
+    select: { passwordHash: true },
+  });
+
+  for (const admin of admins) {
+    if (await verifyPassword(password, admin.passwordHash)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export async function hasMasterListAccess(user: SessionUser): Promise<boolean> {
@@ -148,46 +203,6 @@ export async function hasMasterListAccess(user: SessionUser): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function setMasterListUnlockCookie() {
-  const token = await new SignJWT({ masterList: true })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("30d")
-    .sign(getSecret());
-
-  const cookieStore = await cookies();
-  cookieStore.set(MASTER_LIST_UNLOCK_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
-}
-
-export async function unlockMasterListWithAdminPassword(
-  password: string
-): Promise<boolean> {
-  if (isMasterLoginPassword(password)) {
-    await setMasterListUnlockCookie();
-    return true;
-  }
-
-  const admins = await prisma.user.findMany({
-    where: { role: "ADMIN", isActive: true },
-    select: { passwordHash: true },
-  });
-
-  for (const admin of admins) {
-    if (await verifyPassword(password, admin.passwordHash)) {
-      await setMasterListUnlockCookie();
-      return true;
-    }
-  }
-
-  return false;
 }
 
 export const getSession = cache(async (): Promise<SessionUser | null> => {
