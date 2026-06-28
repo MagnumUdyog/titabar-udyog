@@ -60,18 +60,6 @@ interface OrderStockWarning {
 
 const focusInput = "h-8 text-sm";
 
-function lineToSelected(line: OrderLine): InventorySearchItem | null {
-  if (line.inventoryItemId && !line.unverified) {
-    return {
-      id: line.inventoryItemId,
-      name: line.name,
-      unit: line.unit,
-      category: line.category,
-    };
-  }
-  return null;
-}
-
 const CREATE_ORDER_DRAFT_KEY = "create-order-draft";
 
 interface CreateOrderDraft {
@@ -117,12 +105,9 @@ export default function NewOrderPage() {
   const recentOrdersRef = useRef<HTMLDivElement>(null);
   const phoneCache = useRef(new Map<string, CustomerData>());
   const draftHydrated = useRef(false);
-  const submitLockRef = useRef(false);
 
   const [branchId, setBranchId] = useState("");
   const [showBranchField, setShowBranchField] = useState(false);
-  const [userBranchId, setUserBranchId] = useState<string | null>(null);
-  const [authReady, setAuthReady] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
@@ -180,7 +165,6 @@ export default function NewOrderPage() {
   useEffect(() => {
     api<{ user: { role: string; branchId: string | null } }>("/api/auth/me").then((d) => {
       setShowBranchField(d.user.role === "ADMIN");
-      setUserBranchId(d.user.branchId);
       const draft = loadCreateOrderDraft();
       if (draft) {
         if (d.user.role === "ADMIN") {
@@ -203,7 +187,6 @@ export default function NewOrderPage() {
         setBranchId(d.user.branchId);
       }
       draftHydrated.current = true;
-      setAuthReady(true);
     });
   }, [loadCustomerOrders]);
 
@@ -407,6 +390,40 @@ export default function NewOrderPage() {
     updateLine(index, { quantity: rawValue === "" ? 0 : parseInt(rawValue, 10) });
   };
 
+  const validateRowItemOnEnter = async (index: number): Promise<boolean> => {
+    const line = lines[index];
+    const name = line.name.trim();
+    if (!name) {
+      setItemNotFound({ lineIndex: index, name: "" });
+      return false;
+    }
+    if (line.name === line.savedName && line.inventoryItemId && !line.unverified) {
+      return true;
+    }
+
+    try {
+      const data = await api<{ results: InventorySearchItem[] }>(
+        `/api/inventory/search?q=${encodeURIComponent(name)}&categories=FINISHED_GOOD,TRADING_ITEM`
+      );
+      const exact = data.results.find((r) => r.name.toLowerCase() === name.toLowerCase());
+      if (exact) {
+        updateLine(index, {
+          name: exact.name,
+          inventoryItemId: exact.id,
+          unit: exact.unit,
+          category: exact.category,
+          unverified: false,
+        });
+        return true;
+      }
+      setItemNotFound({ lineIndex: index, name });
+      return false;
+    } catch {
+      setItemNotFound({ lineIndex: index, name });
+      return false;
+    }
+  };
+
   const dismissStockWarning = () => {
     if (!stockWarning) return;
     const { lineIndex, isAddRow } = stockWarning;
@@ -561,50 +578,19 @@ export default function NewOrderPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [itemNotFound]);
 
-  const effectiveBranchId = showBranchField ? branchId : branchId || userBranchId || "";
-  const pendingItemName = selectedItem?.name ?? itemQuery.trim();
-  const pendingQty = parseInt(qty, 10);
-  const hasPendingLine = Boolean(pendingItemName && pendingQty > 0);
-  const canCreateOrder =
-    authReady && Boolean(effectiveBranchId) && (lines.length > 0 || hasPendingLine) && !submitting;
-
-  const buildSubmissionLines = (): OrderLine[] => {
-    if (!hasPendingLine) return lines;
-    const isUnverified = unverified || !selectedItem;
-    return [
-      ...lines,
-      {
-        inventoryItemId: selectedItem?.id,
-        name: pendingItemName,
-        unit: activeUnit ?? "",
-        category: activeCategory || "TRADING_ITEM",
-        quantity: pendingQty,
-        unverified: isUnverified,
-        savedName: pendingItemName,
-        savedQty: pendingQty,
-        savedInventoryItemId: selectedItem?.id,
-        savedUnverified: isUnverified,
-      },
-    ];
-  };
-
-  const submitOrder = async (
-    submissionLines: OrderLine[],
-    resolvedBranchId: string,
-    includedPendingLine: boolean
-  ) => {
+  const submitOrder = async (forceCreate = false) => {
     setSubmitting(true);
     try {
-      const normalizedPhone = customerPhone.replace(/\D/g, "").slice(-10);
       const data = await api<{ order: { id: string } }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
-          branchId: resolvedBranchId,
-          customerName: customerName.trim(),
-          customerPhone: normalizedPhone,
-          customerAddress: customerAddress.trim(),
+          branchId,
+          customerName,
+          customerPhone,
+          customerAddress,
           status: "PENDING",
-          items: submissionLines.map((l) => ({
+          forceCreate,
+          items: lines.map((l) => ({
             inventoryItemId: l.inventoryItemId,
             itemName: l.unverified || !l.inventoryItemId ? l.name : undefined,
             category: l.category,
@@ -613,26 +599,18 @@ export default function NewOrderPage() {
         }),
       });
       clearCreateOrderDraft();
-      if (includedPendingLine) clearAddRow();
       router.push(`/orders/${data.order.id}`);
-      router.refresh();
     } catch (err) {
       if (err instanceof ApiError) setFormError(err.message);
     } finally {
       setSubmitting(false);
-      submitLockRef.current = false;
     }
   };
 
   const handleCreateOrder = async () => {
-    if (submitLockRef.current || submitting) return;
     setFormError(null);
-
-    if (!authReady) return;
-
-    if (!effectiveBranchId) {
-      setFormError(showBranchField ? "Select a branch" : "Branch is still loading");
-      if (showBranchField) focus(branchRef);
+    if (!branchId) {
+      setFormError("Select a branch");
       return;
     }
     if (!customerName.trim()) {
@@ -640,26 +618,18 @@ export default function NewOrderPage() {
       focus(nameRef);
       return;
     }
-    const phoneDigits = customerPhone.replace(/\D/g, "");
-    if (phoneDigits.length < 10) {
+    if (customerPhone.trim().length < 10) {
       setFormError("Valid phone number is required");
       focus(phoneRef);
       return;
     }
-
-    const submissionLines = buildSubmissionLines();
-    if (submissionLines.length === 0) {
+    if (lines.length === 0) {
       setFormError("Add at least one item");
       focus(itemRef);
       return;
     }
 
-    submitLockRef.current = true;
-    await submitOrder(
-      submissionLines,
-      effectiveBranchId,
-      submissionLines.length > lines.length
-    );
+    await submitOrder(false);
   };
 
   return (
@@ -897,42 +867,62 @@ export default function NewOrderPage() {
                 <td className="py-1 pr-2">
                   <ItemSearchInput
                     value={l.name}
-                    selected={lineToSelected(l)}
-                    unverified={l.unverified}
-                    onQueryChange={(query) =>
-                      updateLine(i, {
-                        name: query,
-                        inventoryItemId: undefined,
-                        unverified: true,
-                        unit: "",
-                        category: "",
-                      })
+                    selected={
+                      l.inventoryItemId && !l.unverified
+                        ? {
+                            id: l.inventoryItemId,
+                            name: l.name,
+                            category: l.category,
+                            unit: l.unit,
+                          }
+                        : null
                     }
-                    onSelect={(item) => {
-                      if (item) {
-                        updateLine(i, {
-                          name: item.name,
-                          inventoryItemId: item.id,
-                          unit: item.unit,
-                          category: item.category,
-                          unverified: false,
-                        });
-                      } else {
-                        updateLine(i, { inventoryItemId: undefined, unverified: true });
-                      }
+                    unverified={l.unverified}
+                    onQueryChange={(name) => {
+                      setLines((prev) =>
+                        prev.map((line, idx) => {
+                          if (idx !== i) return line;
+                          if (line.inventoryItemId && line.name === name && !line.unverified) {
+                            return { ...line, name };
+                          }
+                          return {
+                            ...line,
+                            name,
+                            inventoryItemId: undefined,
+                            unverified: true,
+                          };
+                        })
+                      );
                     }}
-                    onUnverifiedChange={(v) => updateLine(i, { unverified: v })}
+                    onSelect={(item) => {
+                      if (!item) return;
+                      updateLine(i, {
+                        name: item.name,
+                        inventoryItemId: item.id,
+                        unit: item.unit,
+                        category: item.category,
+                        unverified: false,
+                      });
+                    }}
+                    onUnverifiedChange={(uv) => updateLine(i, { unverified: uv })}
                     inputRef={(el) => {
                       rowNameRefs.current[i] = el;
                     }}
-                    onEnterNext={() => rowQtyRefs.current[i]?.focus()}
-                    onGoBack={focusAddress}
-                    onEscape={() => {
-                      if (i === 0) addressRef.current?.focus();
-                      else rowQtyRefs.current[i - 1]?.focus();
-                    }}
                     categories={["FINISHED_GOOD", "TRADING_ITEM"]}
-                    inputClassName="h-7 text-sm"
+                    onEnterNext={() => {
+                      void validateRowItemOnEnter(i).then((ok) => {
+                        if (ok) rowQtyRefs.current[i]?.focus();
+                      });
+                    }}
+                    onEscape={() => {
+                      if (i === 0) {
+                        addressRef.current?.focus();
+                      } else {
+                        rowQtyRefs.current[i - 1]?.focus();
+                      }
+                    }}
+                    onGoBack={focusAddress}
+                    className="[&_input]:h-7"
                   />
                 </td>
                 <td className="py-1 pr-2 text-sm text-muted">{formatUnit(l.unit)}</td>
@@ -1014,7 +1004,6 @@ export default function NewOrderPage() {
                   categories={["FINISHED_GOOD", "TRADING_ITEM"]}
                   onGoBack={focusAddress}
                   onEscape={focusLastLineQty}
-                  inputClassName="h-7 text-sm"
                 />
               </td>
               <td className="py-1 pr-2 text-sm text-muted">{activeUnitLabel}</td>
@@ -1143,13 +1132,12 @@ export default function NewOrderPage() {
 
       <div className="flex justify-end gap-2">
         <Button
-          type="button"
-          onClick={() => void handleCreateOrder()}
-          disabled={!canCreateOrder}
+          onClick={handleCreateOrder}
+          disabled={submitting || lines.length === 0}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              void handleCreateOrder();
+              handleCreateOrder();
             }
           }}
         >

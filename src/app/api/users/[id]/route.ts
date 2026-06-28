@@ -7,13 +7,7 @@ import { z } from "zod";
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
-  phone: z
-    .string()
-    .optional()
-    .transform((v) => {
-      const digits = (v ?? "").replace(/\D/g, "");
-      return digits.length >= 10 ? digits.slice(-10) : undefined;
-    }),
+  phone: z.string().min(10).optional(),
   password: z.string().min(4).optional(),
   role: z.enum(["ADMIN", "BRANCH_USER"]).optional(),
   branchId: z.string().optional().nullable(),

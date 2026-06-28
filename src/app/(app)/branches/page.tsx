@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import { api, ApiError } from "@/lib/fetcher";
-import { cn, normalizePhone } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { modalFieldKeyDown, setModalFieldRef } from "@/lib/modal-field-nav";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 
@@ -131,7 +131,7 @@ export default function BranchesPage() {
       name: b.name,
       code: b.code,
       phone: b.phone || "",
-      username: b.branchUser?.name ?? b.name,
+      username: b.name,
       password: "",
       confirmPassword: "",
       isActive: b.isActive,
@@ -153,26 +153,22 @@ export default function BranchesPage() {
   };
 
   const validatePasswords = (
-    password: string,
-    confirmPassword: string,
+    credentials: CredentialsForm,
     requirePassword: boolean,
     setError: (msg: string) => void
   ) => {
-    const pwd = password.trim();
-    const confirm = confirmPassword.trim();
-
     if (requirePassword) {
-      if (!pwd || !confirm) {
+      if (!credentials.password || !credentials.confirmPassword) {
         setError("Password and confirm password are required");
         return false;
       }
     }
-    if (pwd || confirm) {
-      if (pwd !== confirm) {
+    if (credentials.password || credentials.confirmPassword) {
+      if (credentials.password !== credentials.confirmPassword) {
         setError("Passwords do not match");
         return false;
       }
-      if (pwd.length < 4) {
+      if (credentials.password.length < 4) {
         setError("Password must be at least 4 characters");
         return false;
       }
@@ -181,28 +177,8 @@ export default function BranchesPage() {
     return true;
   };
 
-  const validateBranchPhone = (phone: string, setError: (msg: string) => void) => {
-    const digits = normalizePhone(phone);
-    if (!digits || digits.length < 10) {
-      setError("Phone must be at least 10 digits");
-      return null;
-    }
-    return digits;
-  };
-
   const saveAdd = async () => {
-    if (!form.name.trim()) {
-      setPasswordError("Branch name is required");
-      return;
-    }
-    if (!form.code.trim()) {
-      setPasswordError("Branch code is required");
-      return;
-    }
-    const phone = validateBranchPhone(form.phone, setPasswordError);
-    if (!phone) return;
-    if (!validatePasswords(form.password, form.confirmPassword, true, setPasswordError)) return;
-
+    if (!validatePasswords(form, true, setPasswordError)) return;
     setSaving(true);
     try {
       await api("/api/branches", {
@@ -210,44 +186,41 @@ export default function BranchesPage() {
         body: JSON.stringify({
           name: form.name.trim(),
           code: form.code.trim(),
-          phone,
-          username: form.username.trim() || form.name.trim(),
-          password: form.password.trim(),
+          phone: form.phone.trim(),
+          username: form.username.trim(),
+          password: form.password,
         }),
       });
       closeModal();
       await load();
       toast("Branch created successfully");
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Failed to create branch";
-      setPasswordError(message);
-      toast(message);
+      toast(err instanceof ApiError ? err.message : "Failed to create branch");
     } finally {
       setSaving(false);
     }
   };
 
   const saveEdit = async () => {
-    if (!editId) return;
-    if (!form.name.trim()) {
-      setPasswordError("Branch name is required");
+    if (!validatePasswords(form, false, setPasswordError)) return;
+
+    const editingBranch = branches.find((b) => b.id === editId);
+    const needsNewLogin = !editingBranch?.branchUser;
+    if (needsNewLogin && !form.password) {
+      setPasswordError("Password is required to create branch login");
       return;
     }
-    const phone = validateBranchPhone(form.phone, setPasswordError);
-    if (!phone) return;
-    if (!validatePasswords(form.password, form.confirmPassword, false, setPasswordError)) return;
 
     setSaving(true);
     try {
       const loginName = form.username.trim() || form.name.trim();
       const payload: Record<string, unknown> = {
         name: loginName,
-        phone,
+        phone: form.phone.trim(),
         isActive: form.isActive,
         username: loginName,
       };
-      const pwd = form.password.trim();
-      if (pwd) payload.password = pwd;
+      if (form.password) payload.password = form.password;
 
       const data = await api<{ branch: Branch }>(`/api/branches/${editId}`, {
         method: "PATCH",
@@ -270,24 +243,19 @@ export default function BranchesPage() {
   };
 
   const saveAdminEdit = async () => {
-    if (!adminEditId) return;
-    const phone = validateBranchPhone(adminForm.phone, setAdminPasswordError);
-    if (!phone) return;
-    if (!adminForm.username.trim()) {
-      setAdminPasswordError("Name is required");
+    const phone = adminForm.phone.trim();
+    if (phone.length < 10) {
+      setAdminPasswordError("Phone must be at least 10 digits");
       return;
     }
-    if (!validatePasswords(adminForm.password, adminForm.confirmPassword, false, setAdminPasswordError)) {
-      return;
-    }
+    if (!validatePasswords(adminForm, false, setAdminPasswordError)) return;
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
         name: adminForm.username.trim(),
         phone,
       };
-      const pwd = adminForm.password.trim();
-      if (pwd) payload.password = pwd;
+      if (adminForm.password) payload.password = adminForm.password;
 
       const data = await api<{ user: AdminUser }>(`/api/users/${adminEditId}`, {
         method: "PATCH",
@@ -434,13 +402,12 @@ export default function BranchesPage() {
         open={modal === "add"}
         onClose={closeModal}
         title="Add Branch"
-        onSubmit={saveAdd}
         footer={
           <>
-            <Button type="button" variant="secondary" onClick={closeModal} disabled={saving}>
+            <Button variant="secondary" onClick={closeModal} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button onClick={saveAdd} disabled={saving}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </>
@@ -451,7 +418,6 @@ export default function BranchesPage() {
           form={form}
           passwordError={passwordError}
           onChange={patchForm}
-          onSubmit={saveAdd}
         />
       </Modal>
 
@@ -459,13 +425,12 @@ export default function BranchesPage() {
         open={modal === "edit"}
         onClose={closeModal}
         title="Edit Branch"
-        onSubmit={saveEdit}
         footer={
           <>
-            <Button type="button" variant="secondary" onClick={closeModal} disabled={saving}>
+            <Button variant="secondary" onClick={closeModal} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button onClick={saveEdit} disabled={saving}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </>
@@ -476,7 +441,6 @@ export default function BranchesPage() {
           form={form}
           passwordError={passwordError}
           onChange={patchForm}
-          onSubmit={saveEdit}
         />
       </Modal>
 
@@ -484,13 +448,12 @@ export default function BranchesPage() {
         open={modal === "admin"}
         onClose={closeModal}
         title="Edit Admin"
-        onSubmit={saveAdminEdit}
         footer={
           <>
-            <Button type="button" variant="secondary" onClick={closeModal} disabled={saving}>
+            <Button variant="secondary" onClick={closeModal} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button onClick={saveAdminEdit} disabled={saving}>
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </>
@@ -500,7 +463,6 @@ export default function BranchesPage() {
           form={adminForm}
           passwordError={adminPasswordError}
           onChange={patchAdminForm}
-          onSubmit={saveAdminEdit}
         />
       </Modal>
     </div>
@@ -511,25 +473,19 @@ function AdminEditFields({
   form,
   passwordError,
   onChange,
-  onSubmit,
 }: {
   form: CredentialsForm;
   passwordError: string;
   onChange: (patch: Partial<CredentialsForm>) => void;
-  onSubmit: () => void;
 }) {
   const fieldRefs = useRef<Array<HTMLInputElement | HTMLButtonElement | null>>([]);
   const fieldKeyDown = useCallback(
-    (index: number) => (e: React.KeyboardEvent) =>
-      modalFieldKeyDown(e, fieldRefs.current, index, onSubmit),
-    [onSubmit]
+    (index: number) => (e: React.KeyboardEvent) => modalFieldKeyDown(e, fieldRefs.current, index),
+    []
   );
 
   return (
     <div className="space-y-5">
-      {passwordError && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{passwordError}</p>
-      )}
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Phone</p>
         <Input
@@ -549,8 +505,6 @@ function AdminEditFields({
         onChange={onChange}
         fieldRefs={fieldRefs}
         fieldStartIndex={1}
-        onLastFieldEnter={onSubmit}
-        showInlineError={false}
       />
     </div>
   );
@@ -565,8 +519,6 @@ function LoginCredentialsFields({
   onChange,
   fieldRefs: externalFieldRefs,
   fieldStartIndex = 0,
-  onLastFieldEnter,
-  showInlineError = true,
 }: {
   mode: "add" | "edit";
   username: string;
@@ -576,15 +528,12 @@ function LoginCredentialsFields({
   onChange: (patch: Partial<CredentialsForm>) => void;
   fieldRefs?: React.MutableRefObject<Array<HTMLInputElement | HTMLButtonElement | null>>;
   fieldStartIndex?: number;
-  onLastFieldEnter?: () => void;
-  showInlineError?: boolean;
 }) {
   const localFieldRefs = useRef<Array<HTMLInputElement | HTMLButtonElement | null>>([]);
   const fieldRefs = externalFieldRefs ?? localFieldRefs;
   const fieldKeyDown = useCallback(
-    (index: number) => (e: React.KeyboardEvent) =>
-      modalFieldKeyDown(e, fieldRefs.current, index, onLastFieldEnter),
-    [fieldRefs, onLastFieldEnter]
+    (index: number) => (e: React.KeyboardEvent) => modalFieldKeyDown(e, fieldRefs.current, index),
+    [fieldRefs]
   );
 
   const usernameIndex = fieldStartIndex;
@@ -620,9 +569,7 @@ function LoginCredentialsFields({
           onChange={(e) => onChange({ confirmPassword: e.target.value })}
           onKeyDown={fieldKeyDown(confirmIndex)}
         />
-        {showInlineError && passwordError && (
-          <p className="text-sm text-red-600">{passwordError}</p>
-        )}
+        {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
         {mode === "edit" && (
           <p className="text-xs text-muted">Leave password blank to keep the current password.</p>
         )}
@@ -636,26 +583,20 @@ function BranchFormFields({
   form,
   passwordError,
   onChange,
-  onSubmit,
 }: {
   mode: "add" | "edit";
   form: BranchForm;
   passwordError: string;
   onChange: (patch: Partial<BranchForm>) => void;
-  onSubmit: () => void;
 }) {
   const fieldRefs = useRef<Array<HTMLInputElement | HTMLButtonElement | null>>([]);
   const fieldKeyDown = useCallback(
-    (index: number) => (e: React.KeyboardEvent) =>
-      modalFieldKeyDown(e, fieldRefs.current, index, onSubmit),
-    [onSubmit]
+    (index: number) => (e: React.KeyboardEvent) => modalFieldKeyDown(e, fieldRefs.current, index),
+    []
   );
 
   return (
     <div className="space-y-5">
-      {passwordError && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{passwordError}</p>
-      )}
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
           Branch Info
@@ -696,8 +637,6 @@ function BranchFormFields({
         onChange={onChange}
         fieldRefs={fieldRefs}
         fieldStartIndex={3}
-        onLastFieldEnter={mode === "add" ? onSubmit : undefined}
-        showInlineError={false}
       />
 
       {mode === "edit" && (

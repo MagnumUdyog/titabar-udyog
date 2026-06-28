@@ -5,12 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length < 10) return digits;
-  return digits.slice(-10);
-}
-
 export function formatCurrency(amount: number | string) {
   const n = typeof amount === "string" ? parseFloat(amount) : amount;
   return new Intl.NumberFormat("en-IN", {

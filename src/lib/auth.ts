@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
-import { normalizePhone } from "./utils";
 import type { UserRole } from "@prisma/client";
 
 const SESSION_COOKIE = "titiabar_session";
@@ -39,7 +38,11 @@ export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
 
-export { normalizePhone } from "./utils";
+export function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 10) return digits;
+  return digits.slice(-10);
+}
 
 export async function findUserByLogin(login: string) {
   const trimmed = login.trim();

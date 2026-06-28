@@ -17,8 +17,7 @@ function isFocusableField(el: HTMLInputElement | HTMLButtonElement | null) {
 export function modalFieldKeyDown(
   e: KeyboardEvent,
   refs: Array<HTMLInputElement | HTMLButtonElement | null>,
-  index: number,
-  onLastFieldEnter?: () => void
+  index: number
 ) {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -28,7 +27,6 @@ export function modalFieldKeyDown(
         return;
       }
     }
-    onLastFieldEnter?.();
     return;
   }
 

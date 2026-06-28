@@ -36,9 +36,6 @@ export function handleApiError(error: unknown) {
   }
 
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === "P2002") {
-      return jsonError("That phone number is already in use", 400);
-    }
     if (["P1001", "P1002", "P1008", "P1017", "P2024"].includes(error.code)) {
       console.error("Database connection error:", error.code, error.message);
       return jsonError("Database temporarily unavailable. Please try again.", 503);

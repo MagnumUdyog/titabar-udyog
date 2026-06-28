@@ -27,7 +27,6 @@ interface ItemSearchInputProps {
   onGoBack?: () => void;
   categories?: string[];
   className?: string;
-  inputClassName?: string;
 }
 
 const DEBOUNCE_MS = 200;
@@ -45,75 +44,58 @@ export function ItemSearchInput({
   onGoBack,
   categories,
   className,
-  inputClassName,
 }: ItemSearchInputProps) {
   const internalRef = useRef<HTMLInputElement>(null);
   const ref = inputRef || internalRef;
   const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
-  const searchSeqRef = useRef(0);
   const [suggestions, setSuggestions] = useState<InventorySearchItem[]>([]);
   const [focused, setFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [highlight, setHighlight] = useState(-1);
 
-  const trimmedValue = value.trim();
-  const showDropdown = focused && trimmedValue.length >= 1;
+  const showDropdown = focused && value.trim().length >= 1;
 
-  const resetSearch = useCallback(() => {
-    searchSeqRef.current += 1;
-    setSuggestions([]);
-    setSearched(false);
-    setLoading(false);
-    setHighlight(-1);
-  }, []);
-
-  const runSearch = useCallback(
-    async (term: string) => {
-      const trimmed = term.trim();
-      if (trimmed.length < 1) {
-        resetSearch();
-        return;
-      }
-
-      const seq = ++searchSeqRef.current;
-      setLoading(true);
+  const runSearch = useCallback(async (term: string) => {
+    if (term.length < 1) {
+      setSuggestions([]);
       setSearched(false);
-
-      try {
-        const catQ = categories?.length ? `&categories=${categories.join(",")}` : "";
-        const data = await api<{ results: InventorySearchItem[] }>(
-          `/api/inventory/search?q=${encodeURIComponent(trimmed)}${catQ}`
-        );
-        if (seq !== searchSeqRef.current) return;
-        setSuggestions(data.results);
-        setSearched(true);
-        setHighlight(-1);
-      } catch {
-        if (seq !== searchSeqRef.current) return;
-        setSuggestions([]);
-        setSearched(true);
-      } finally {
-        if (seq === searchSeqRef.current) {
-          setLoading(false);
-        }
-      }
-    },
-    [categories, resetSearch]
-  );
-
-  useEffect(() => {
-    if (trimmedValue.length < 1) {
-      resetSearch();
       return;
     }
 
+    setLoading(true);
+    try {
+      const catQ = categories?.length ? `&categories=${categories.join(",")}` : "";
+      const data = await api<{ results: InventorySearchItem[] }>(
+        `/api/inventory/search?q=${encodeURIComponent(term)}${catQ}`
+      );
+      setSuggestions(data.results);
+      setSearched(true);
+      setHighlight(-1);
+    } catch {
+      setSuggestions([]);
+      setSearched(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [categories]);
+
+  useEffect(() => {
+    const term = value.trim();
+    if (term.length < 1) {
+      setSuggestions([]);
+      setSearched(false);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     const timer = setTimeout(() => {
-      void runSearch(trimmedValue);
+      runSearch(term);
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [trimmedValue, runSearch, resetSearch]);
+  }, [value, runSearch]);
 
   useEffect(() => {
     if (highlight >= 0 && itemRefs.current[highlight]) {
@@ -122,14 +104,12 @@ export function ItemSearchInput({
   }, [highlight]);
 
   const pick = (item: InventorySearchItem) => {
-    searchSeqRef.current += 1;
     onSelect(item);
     onQueryChange(item.name);
     onUnverifiedChange(false);
     setHighlight(-1);
     setSearched(false);
     setSuggestions([]);
-    setLoading(false);
     requestAnimationFrame(() => {
       onEnterNext?.();
     });
@@ -162,13 +142,9 @@ export function ItemSearchInput({
         onEnterNext?.();
         return;
       }
-      if (trimmedValue) {
-        searchSeqRef.current += 1;
+      if (value.trim()) {
         onSelect(null);
         onUnverifiedChange(true);
-        setSearched(false);
-        setSuggestions([]);
-        setLoading(false);
         onEnterNext?.();
       }
       return;
@@ -181,15 +157,10 @@ export function ItemSearchInput({
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      const dropdownActive =
-        trimmedValue.length >= 1 &&
-        (loading || searched || suggestions.length > 0);
-      if (dropdownActive) {
-        searchSeqRef.current += 1;
+      if (showDropdown) {
         setSearched(false);
         setHighlight(-1);
         setSuggestions([]);
-        setLoading(false);
         return;
       }
       onEscape?.();
@@ -198,29 +169,26 @@ export function ItemSearchInput({
 
   const handleChange = (text: string) => {
     onQueryChange(text);
-    onSelect(null);
-    onUnverifiedChange(false);
-
-    const trimmed = text.trim();
-    if (trimmed.length > 0) {
-      setLoading(true);
+    if (selected && text !== selected.name) {
+      onSelect(null);
+      onUnverifiedChange(false);
+    }
+    if (!text.trim()) {
+      onUnverifiedChange(false);
+      setSuggestions([]);
       setSearched(false);
-      setHighlight(-1);
+      setLoading(false);
     } else {
-      resetSearch();
+      setLoading(true);
     }
   };
 
   const handleFocus = () => {
     setFocused(true);
-    const trimmed = value.trim();
-    if (trimmed.length > 0) {
-      onSelect(null);
-      onUnverifiedChange(false);
-      setLoading(true);
-      setSearched(false);
-      setHighlight(-1);
-      void runSearch(trimmed);
+    const term = value.trim();
+    if (term.length > 0) {
+      if (selected) onSelect(null);
+      runSearch(term);
     }
   };
 
@@ -237,7 +205,7 @@ export function ItemSearchInput({
         }}
         placeholder="Type item name..."
         autoComplete="off"
-        className={cn("h-8 text-sm", inputClassName)}
+        className="h-8 text-sm"
       />
 
       {showDropdown && (
@@ -274,7 +242,7 @@ export function ItemSearchInput({
         </ul>
       )}
 
-      {unverified && trimmedValue && !selected && (
+      {unverified && value.trim() && !selected && (
         <span className="mt-0.5 block text-xs text-amber-700">Unverified item</span>
       )}
     </div>

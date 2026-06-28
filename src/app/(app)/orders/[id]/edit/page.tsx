@@ -42,18 +42,6 @@ interface OrderStockWarning {
 
 const focusInput = "h-8 text-sm";
 
-function lineToSelected(line: OrderLine): InventorySearchItem | null {
-  if (line.inventoryItemId && !line.unverified) {
-    return {
-      id: line.inventoryItemId,
-      name: line.name,
-      unit: line.unit,
-      category: line.category,
-    };
-  }
-  return null;
-}
-
 export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -246,6 +234,37 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const handleLineQtyChange = (index: number, rawValue: string) => {
     if (rawValue !== "" && !/^\d+$/.test(rawValue)) return;
     updateLine(index, { quantity: rawValue === "" ? 0 : parseInt(rawValue, 10) });
+  };
+
+  const validateRowItemOnEnter = async (index: number): Promise<boolean> => {
+    const line = lines[index];
+    const name = line.name.trim();
+    if (!name) {
+      setItemNotFound({ lineIndex: index, name: "" });
+      return false;
+    }
+    if (line.name === line.savedName && line.inventoryItemId && !line.unverified) return true;
+    try {
+      const data = await api<{ results: InventorySearchItem[] }>(
+        `/api/inventory/search?q=${encodeURIComponent(name)}&categories=FINISHED_GOOD,TRADING_ITEM`
+      );
+      const exact = data.results.find((r) => r.name.toLowerCase() === name.toLowerCase());
+      if (exact) {
+        updateLine(index, {
+          name: exact.name,
+          inventoryItemId: exact.id,
+          unit: exact.unit,
+          category: exact.category,
+          unverified: false,
+        });
+        return true;
+      }
+      setItemNotFound({ lineIndex: index, name });
+      return false;
+    } catch {
+      setItemNotFound({ lineIndex: index, name });
+      return false;
+    }
   };
 
   const dismissStockWarning = () => {
@@ -652,42 +671,62 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                 <td className="py-1 pr-2">
                   <ItemSearchInput
                     value={l.name}
-                    selected={lineToSelected(l)}
-                    unverified={l.unverified}
-                    onQueryChange={(query) =>
-                      updateLine(i, {
-                        name: query,
-                        inventoryItemId: undefined,
-                        unverified: true,
-                        unit: "",
-                        category: "",
-                      })
+                    selected={
+                      l.inventoryItemId && !l.unverified
+                        ? {
+                            id: l.inventoryItemId,
+                            name: l.name,
+                            category: l.category,
+                            unit: l.unit,
+                          }
+                        : null
                     }
-                    onSelect={(item) => {
-                      if (item) {
-                        updateLine(i, {
-                          name: item.name,
-                          inventoryItemId: item.id,
-                          unit: item.unit,
-                          category: item.category,
-                          unverified: false,
-                        });
-                      } else {
-                        updateLine(i, { inventoryItemId: undefined, unverified: true });
-                      }
+                    unverified={l.unverified}
+                    onQueryChange={(name) => {
+                      setLines((prev) =>
+                        prev.map((line, idx) => {
+                          if (idx !== i) return line;
+                          if (line.inventoryItemId && line.name === name && !line.unverified) {
+                            return { ...line, name };
+                          }
+                          return {
+                            ...line,
+                            name,
+                            inventoryItemId: undefined,
+                            unverified: true,
+                          };
+                        })
+                      );
                     }}
-                    onUnverifiedChange={(v) => updateLine(i, { unverified: v })}
+                    onSelect={(item) => {
+                      if (!item) return;
+                      updateLine(i, {
+                        name: item.name,
+                        inventoryItemId: item.id,
+                        unit: item.unit,
+                        category: item.category,
+                        unverified: false,
+                      });
+                    }}
+                    onUnverifiedChange={(uv) => updateLine(i, { unverified: uv })}
                     inputRef={(el) => {
                       rowNameRefs.current[i] = el;
                     }}
-                    onEnterNext={() => rowQtyRefs.current[i]?.focus()}
-                    onGoBack={focusAddress}
-                    onEscape={() => {
-                      if (i === 0) addressRef.current?.focus();
-                      else rowQtyRefs.current[i - 1]?.focus();
-                    }}
                     categories={["FINISHED_GOOD", "TRADING_ITEM"]}
-                    inputClassName="h-7 text-sm"
+                    onEnterNext={() => {
+                      void validateRowItemOnEnter(i).then((ok) => {
+                        if (ok) rowQtyRefs.current[i]?.focus();
+                      });
+                    }}
+                    onEscape={() => {
+                      if (i === 0) {
+                        addressRef.current?.focus();
+                      } else {
+                        rowQtyRefs.current[i - 1]?.focus();
+                      }
+                    }}
+                    onGoBack={focusAddress}
+                    className="[&_input]:h-7"
                   />
                 </td>
                 <td className="py-1 pr-2 text-sm text-muted">{formatUnit(l.unit)}</td>
@@ -769,7 +808,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                   categories={["FINISHED_GOOD", "TRADING_ITEM"]}
                   onGoBack={focusAddress}
                   onEscape={focusLastLineQty}
-                  inputClassName="h-7 text-sm"
                 />
               </td>
               <td className="py-1 pr-2 text-sm text-muted">{activeUnitLabel}</td>
