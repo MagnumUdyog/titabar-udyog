@@ -27,6 +27,7 @@ interface ItemSearchInputProps {
   onGoBack?: () => void;
   categories?: string[];
   className?: string;
+  inputClassName?: string;
 }
 
 const DEBOUNCE_MS = 200;
@@ -44,6 +45,7 @@ export function ItemSearchInput({
   onGoBack,
   categories,
   className,
+  inputClassName,
 }: ItemSearchInputProps) {
   const internalRef = useRef<HTMLInputElement>(null);
   const ref = inputRef || internalRef;
@@ -133,21 +135,6 @@ export function ItemSearchInput({
     });
   };
 
-  const beginSearch = useCallback(
-    (term: string) => {
-      const trimmed = term.trim();
-      if (trimmed.length < 1) {
-        resetSearch();
-        return;
-      }
-      setLoading(true);
-      setSearched(true);
-      setHighlight(-1);
-      void runSearch(trimmed);
-    },
-    [resetSearch, runSearch]
-  );
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -200,7 +187,10 @@ export function ItemSearchInput({
         setHighlight(-1);
         setSuggestions([]);
         setLoading(false);
-        const el = typeof ref === "object" && ref !== null && "current" in ref ? ref.current : internalRef.current;
+        const el =
+          typeof ref === "object" && ref !== null && "current" in ref
+            ? ref.current
+            : internalRef.current;
         el?.blur();
         return;
       }
@@ -210,20 +200,15 @@ export function ItemSearchInput({
 
   const handleChange = (text: string) => {
     onQueryChange(text);
-
-    // Any keystroke clears a prior selection — never block search on old state.
-    if (selected) {
-      onSelect(null);
-      onUnverifiedChange(false);
-    }
+    onSelect(null);
+    onUnverifiedChange(false);
 
     const trimmed = text.trim();
     if (trimmed.length > 0) {
       setLoading(true);
-      setSearched(true);
+      setSearched(false);
       setHighlight(-1);
     } else {
-      onUnverifiedChange(false);
       resetSearch();
     }
   };
@@ -232,13 +217,23 @@ export function ItemSearchInput({
     setFocused(true);
     const trimmed = value.trim();
     if (trimmed.length > 0) {
-      if (selected) {
-        onSelect(null);
-        onUnverifiedChange(false);
-      }
-      beginSearch(trimmed);
+      onSelect(null);
+      onUnverifiedChange(false);
+      setLoading(true);
+      setSearched(false);
+      setHighlight(-1);
+      void runSearch(trimmed);
     }
   };
+
+  console.log("dropdown debug:", {
+    focused,
+    trimmedValue,
+    showDropdown,
+    loading,
+    searched,
+    suggestions: suggestions.length,
+  });
 
   return (
     <div className={cn("relative min-w-0 flex-1", className)}>
@@ -253,7 +248,7 @@ export function ItemSearchInput({
         }}
         placeholder="Type item name..."
         autoComplete="off"
-        className="h-8 text-sm"
+        className={cn("h-8 text-sm", inputClassName)}
       />
 
       {showDropdown && (
