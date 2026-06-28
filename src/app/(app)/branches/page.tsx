@@ -328,11 +328,17 @@ export default function BranchesPage() {
   };
 
   const deleteBranch = async (branch: Branch) => {
-    if (!confirm(`Delete branch "${branch.name}"? This cannot be undone.`)) return;
+    if (
+      !confirm(
+        `Delete branch "${branch.name}" permanently? All orders, stock, and login for this branch will be removed. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
     try {
       await api(`/api/branches/${branch.id}`, { method: "DELETE" });
       setBranches((prev) => prev.filter((b) => b.id !== branch.id));
-      toast("Branch deleted successfully");
+      toast("Branch deleted permanently");
     } catch (err) {
       toast(err instanceof ApiError ? err.message : "Failed to delete branch");
     }

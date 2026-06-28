@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { hashPassword, requireAdmin } from "@/lib/auth";
 import { jsonOk, jsonError, handleApiError } from "@/lib/api";
 import { branchUpdateSchema } from "@/lib/branch-validation";
+import { deleteBranchAndRelatedData } from "@/lib/branch-delete";
 import { logAudit } from "@/lib/stock";
 
 function mapBranchWithUser<T extends { users: Array<{ id: string; name: string; phone: string; isActive: boolean }> }>(
@@ -101,22 +102,23 @@ export async function DELETE(
     const admin = await requireAdmin();
     const { id } = await params;
 
-    const branch = await prisma.$transaction(async (tx) => {
-      const updated = await tx.branch.update({
-        where: { id },
-        data: { isActive: false },
-      });
+    const existing = await prisma.branch.findUnique({
+      where: { id },
+      select: { id: true, name: true, code: true },
+    });
+    if (!existing) {
+      return jsonError("Branch not found", 404);
+    }
 
-      await tx.user.updateMany({
-        where: { branchId: id, role: "BRANCH_USER" },
-        data: { isActive: false },
-      });
-
-      return updated;
+    await prisma.$transaction(async (tx) => {
+      await deleteBranchAndRelatedData(tx, id);
     });
 
-    await logAudit(admin.id, "DEACTIVATE", "Branch", id, id);
-    return jsonOk({ branch });
+    await logAudit(admin.id, "DELETE", "Branch", id, id, {
+      name: existing.name,
+      code: existing.code,
+    });
+    return jsonOk({ deleted: true, id });
   } catch (error) {
     return handleApiError(error);
   }
