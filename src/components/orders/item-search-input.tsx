@@ -181,17 +181,15 @@ export function ItemSearchInput({
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      if (showDropdown) {
+      const dropdownActive =
+        trimmedValue.length >= 1 &&
+        (loading || searched || suggestions.length > 0);
+      if (dropdownActive) {
         searchSeqRef.current += 1;
         setSearched(false);
         setHighlight(-1);
         setSuggestions([]);
         setLoading(false);
-        const el =
-          typeof ref === "object" && ref !== null && "current" in ref
-            ? ref.current
-            : internalRef.current;
-        el?.blur();
         return;
       }
       onEscape?.();
@@ -225,15 +223,6 @@ export function ItemSearchInput({
       void runSearch(trimmed);
     }
   };
-
-  console.log("dropdown debug:", {
-    focused,
-    trimmedValue,
-    showDropdown,
-    loading,
-    searched,
-    suggestions: suggestions.length,
-  });
 
   return (
     <div className={cn("relative min-w-0 flex-1", className)}>
