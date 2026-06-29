@@ -16,6 +16,7 @@ import {
   type InventorySearchItem,
 } from "@/components/orders/item-search-input";
 import { api, ApiError } from "@/lib/fetcher";
+import { isValidPriceInput, parsePriceInput } from "@/lib/order-price";
 import { cn, formatQty, formatUnit } from "@/lib/utils";
 
 interface PastOrder {
@@ -41,6 +42,7 @@ interface OrderLine {
   unit: string;
   category: string;
   quantity: number;
+  price: string;
   unverified: boolean;
   savedName: string;
   savedQty: number;
@@ -99,8 +101,10 @@ export default function NewOrderPage() {
   const addressRef = useRef<HTMLInputElement>(null);
   const itemRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
+  const addPriceRef = useRef<HTMLInputElement>(null);
   const rowNameRefs = useRef<(HTMLInputElement | null)[]>([]);
   const rowQtyRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const rowPriceRefs = useRef<(HTMLInputElement | null)[]>([]);
   const addRef = useRef<HTMLButtonElement>(null);
   const recentOrdersRef = useRef<HTMLDivElement>(null);
   const phoneCache = useRef(new Map<string, CustomerData>());
@@ -117,6 +121,7 @@ export default function NewOrderPage() {
   const [selectedItem, setSelectedItem] = useState<InventorySearchItem | null>(null);
   const [unverified, setUnverified] = useState(false);
   const [qty, setQty] = useState("");
+  const [addPrice, setAddPrice] = useState("");
 
   const [recentOrders, setRecentOrders] = useState<PastOrder[]>([]);
   const [customerLookupDone, setCustomerLookupDone] = useState(false);
@@ -238,6 +243,7 @@ export default function NewOrderPage() {
         unit: item.unit,
         category: item.category,
         quantity: item.qty,
+        price: "",
         unverified: false,
         savedName: item.itemName,
         savedQty: item.qty,
@@ -313,6 +319,7 @@ export default function NewOrderPage() {
     setSelectedItem(null);
     setUnverified(false);
     setQty("");
+    setAddPrice("");
   };
 
   const focusAddress = () => {
@@ -324,9 +331,14 @@ export default function NewOrderPage() {
     else itemRef.current?.focus();
   };
 
-  const focusLastLineQty = () => {
-    if (lines.length > 0) rowQtyRefs.current[lines.length - 1]?.focus();
+  const focusLastLinePrice = () => {
+    if (lines.length > 0) rowPriceRefs.current[lines.length - 1]?.focus();
     else focusAddress();
+  };
+
+  const handleLinePriceChange = (index: number, rawValue: string) => {
+    if (!isValidPriceInput(rawValue)) return;
+    updateLine(index, { price: rawValue });
   };
 
   const tryStockWarning = async (
@@ -521,6 +533,7 @@ export default function NewOrderPage() {
         unit: activeUnit ?? "",
         category: activeCategory || "TRADING_ITEM",
         quantity,
+        price: addPrice,
         unverified: isUnverified,
         savedName: name,
         savedQty: quantity,
@@ -531,7 +544,7 @@ export default function NewOrderPage() {
     setFormError(null);
     clearAddRow();
     setTimeout(() => itemRef.current?.focus(), 0);
-  }, [selectedItem, itemQuery, qty, unverified, activeUnit, activeCategory]);
+  }, [selectedItem, itemQuery, qty, addPrice, unverified, activeUnit, activeCategory]);
 
   useEffect(() => {
     if (!stockWarning) return;
@@ -601,6 +614,7 @@ export default function NewOrderPage() {
             itemName: l.unverified || !l.inventoryItemId ? l.name : undefined,
             category: l.category,
             quantity: l.quantity,
+            price: parsePriceInput(l.price),
           })),
         }),
       });
@@ -863,6 +877,7 @@ export default function NewOrderPage() {
               <th className="w-14 py-1 pr-2">Unit</th>
               <th className="w-32 py-1 pr-2">Category</th>
               <th className="w-20 py-1 pr-2 text-right">Qty</th>
+              <th className="w-24 py-1 pr-2 text-right">Price (₹)</th>
               <th className="w-28 py-1 pr-2">Status</th>
             </tr>
           </thead>
@@ -959,13 +974,7 @@ export default function NewOrderPage() {
                             (l.name === l.savedName ? l.savedInventoryItemId : undefined);
                           const ok = await tryStockWarning(i, itemId, l.name, quantity, false);
                           if (!ok) return;
-                          setTimeout(() => {
-                            if (i < lines.length - 1) {
-                              rowNameRefs.current[i + 1]?.focus();
-                            } else {
-                              itemRef.current?.focus();
-                            }
-                          }, 0);
+                          setTimeout(() => rowPriceRefs.current[i]?.focus(), 0);
                         })();
                         return;
                       }
@@ -975,6 +984,38 @@ export default function NewOrderPage() {
                       }
                     }}
                     className="ml-auto h-7 w-20 text-right text-sm"
+                  />
+                </td>
+                <td className="py-1 text-right">
+                  <Input
+                    ref={(el) => {
+                      rowPriceRefs.current[i] = el;
+                    }}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={l.price}
+                    onChange={(e) => handleLinePriceChange(i, e.target.value)}
+                    onKeyDown={(e) => {
+                      onItemsHomeEnd(e);
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setTimeout(() => {
+                          if (i < lines.length - 1) {
+                            rowNameRefs.current[i + 1]?.focus();
+                          } else {
+                            itemRef.current?.focus();
+                          }
+                        }, 0);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        rowQtyRefs.current[i]?.focus();
+                      }
+                    }}
+                    className="ml-auto h-7 w-24 text-right text-sm"
                   />
                 </td>
                 <td className="py-1 pr-2 text-xs">
@@ -1009,7 +1050,7 @@ export default function NewOrderPage() {
                   onEnterNext={() => qtyRef.current?.focus()}
                   categories={["FINISHED_GOOD", "TRADING_ITEM"]}
                   onGoBack={focusAddress}
-                  onEscape={focusLastLineQty}
+                  onEscape={focusLastLinePrice}
                 />
               </td>
               <td className="py-1 pr-2 text-sm text-muted">{activeUnitLabel}</td>
@@ -1047,7 +1088,7 @@ export default function NewOrderPage() {
                           true
                         );
                         if (!ok) return;
-                        addLine(quantity);
+                        setTimeout(() => addPriceRef.current?.focus(), 0);
                       })();
                       return;
                     }
@@ -1057,6 +1098,49 @@ export default function NewOrderPage() {
                     }
                   }}
                   className="ml-auto h-7 w-20 text-right text-sm"
+                />
+              </td>
+              <td className="py-1 text-right">
+                <Input
+                  ref={addPriceRef}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={addPrice}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (isValidPriceInput(v)) setAddPrice(v);
+                  }}
+                  onKeyDown={(e) => {
+                    onItemsHomeEnd(e);
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const name = selectedItem?.name ?? itemQuery.trim();
+                      const quantity = parseInt(qty, 10);
+                      if (!name || !quantity || quantity <= 0) {
+                        itemRef.current?.focus();
+                        return;
+                      }
+                      void (async () => {
+                        const ok = await tryStockWarning(
+                          lines.length,
+                          selectedItem?.id,
+                          name,
+                          quantity,
+                          true
+                        );
+                        if (!ok) return;
+                        addLine(quantity);
+                      })();
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      qtyRef.current?.focus();
+                    }
+                  }}
+                  className="ml-auto h-7 w-24 text-right text-sm"
                 />
               </td>
               <td className="py-1 pr-2 text-right">

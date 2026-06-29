@@ -9,6 +9,7 @@ import {
 } from "@/lib/stock";
 import { deleteOrderAndRelatedData } from "@/lib/order-delete";
 import { resolveOrderItems } from "@/lib/orders";
+import { sumOrderTotalAmount } from "@/lib/order-price";
 import { z } from "zod";
 
 const itemSchema = z
@@ -17,6 +18,7 @@ const itemSchema = z
     itemName: z.string().optional(),
     category: z.enum(["RAW_MATERIAL", "FINISHED_GOOD", "TRADING_ITEM"]).optional(),
     quantity: z.number().positive(),
+    price: z.number().nonnegative().nullable().optional(),
   })
   .refine((i) => i.inventoryItemId || (i.itemName && i.itemName.trim()), {
     message: "Item ID or name required",
@@ -97,21 +99,28 @@ export async function PATCH(
         await tx.orderItem.deleteMany({ where: { orderId: id } });
 
         const createdItems = [];
-        for (const { inv, quantity } of resolvedItems) {
-          const oi = await tx.orderItem.create({
-            data: {
-              orderId: id,
-              inventoryItemId: inv.id,
-              category: inv.category,
-              itemNameSnapshot: inv.name,
-              unitSnapshot: inv.unit?.trim() || "—",
-              quantity,
-              price: 0,
-              lineTotal: 0,
-            },
-          });
+        const orderItemsData = resolvedItems.map(({ inv, quantity, price }) => ({
+          orderId: id,
+          inventoryItemId: inv.id,
+          category: inv.category,
+          itemNameSnapshot: inv.name,
+          unitSnapshot: inv.unit?.trim() || "—",
+          quantity,
+          price,
+          lineTotal: price != null ? quantity * price : null,
+        }));
+
+        for (const itemData of orderItemsData) {
+          const oi = await tx.orderItem.create({ data: itemData });
           createdItems.push(oi);
         }
+
+        const totalAmount = sumOrderTotalAmount(
+          orderItemsData.map((item) => ({
+            quantity: Number(item.quantity),
+            price: item.price,
+          }))
+        );
 
         return tx.order.update({
           where: { id },
@@ -120,7 +129,7 @@ export async function PATCH(
             customerPhone: body.customerPhone,
             customerAddress: body.customerAddress,
             remarks: body.remarks,
-            totalAmount: 0,
+            totalAmount,
           },
           include: { items: true, reservations: true },
         });

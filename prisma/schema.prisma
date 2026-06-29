@@ -219,8 +219,8 @@ model OrderItem {
   itemNameSnapshot String
   unitSnapshot     String
   quantity         Decimal
-  price            Decimal
-  lineTotal        Decimal
+  price            Decimal?
+  lineTotal        Decimal?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 

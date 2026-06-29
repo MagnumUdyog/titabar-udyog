@@ -15,6 +15,7 @@ import {
   type InventorySearchItem,
 } from "@/components/orders/item-search-input";
 import { api, ApiError } from "@/lib/fetcher";
+import { isValidPriceInput, parsePriceInput, priceFromDb } from "@/lib/order-price";
 import { formatQty, formatUnit } from "@/lib/utils";
 
 interface OrderLine {
@@ -23,6 +24,7 @@ interface OrderLine {
   unit: string;
   category: string;
   quantity: number;
+  price: string;
   unverified: boolean;
   savedName: string;
   savedQty: number;
@@ -50,8 +52,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const addressRef = useRef<HTMLInputElement>(null);
   const itemRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
+  const addPriceRef = useRef<HTMLInputElement>(null);
   const rowNameRefs = useRef<(HTMLInputElement | null)[]>([]);
   const rowQtyRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const rowPriceRefs = useRef<(HTMLInputElement | null)[]>([]);
   const addRef = useRef<HTMLButtonElement>(null);
   const stockWarningModalRef = useRef<HTMLDivElement>(null);
   const itemNotFoundModalRef = useRef<HTMLDivElement>(null);
@@ -70,6 +74,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const [selectedItem, setSelectedItem] = useState<InventorySearchItem | null>(null);
   const [unverified, setUnverified] = useState(false);
   const [qty, setQty] = useState("");
+  const [addPrice, setAddPrice] = useState("");
 
   const [lineWarnings, setLineWarnings] = useState<Record<number, { lowStock: boolean }>>({});
   const [stockWarning, setStockWarning] = useState<{
@@ -106,12 +111,14 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             const name = item.itemNameSnapshot as string;
             const quantity = Number(item.quantity);
             const inventoryItemId = item.inventoryItemId as string | undefined;
+            const priceValue = priceFromDb(item.price);
             return {
               inventoryItemId,
               name,
               unit: (item.unitSnapshot as string) || "",
               category: item.category as string,
               quantity,
+              price: priceValue != null ? String(priceValue) : "",
               unverified: false,
               savedName: name,
               savedQty: quantity,
@@ -163,6 +170,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     setSelectedItem(null);
     setUnverified(false);
     setQty("");
+    setAddPrice("");
   };
 
   const focusAddress = () => addressRef.current?.focus();
@@ -172,9 +180,14 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     else itemRef.current?.focus();
   };
 
-  const focusLastLineQty = () => {
-    if (lines.length > 0) rowQtyRefs.current[lines.length - 1]?.focus();
+  const focusLastLinePrice = () => {
+    if (lines.length > 0) rowPriceRefs.current[lines.length - 1]?.focus();
     else focusAddress();
+  };
+
+  const handleLinePriceChange = (index: number, rawValue: string) => {
+    if (!isValidPriceInput(rawValue)) return;
+    updateLine(index, { price: rawValue });
   };
 
   const tryStockWarning = async (
@@ -332,6 +345,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         unit: activeUnit ?? "",
         category: activeCategory || "TRADING_ITEM",
         quantity,
+        price: addPrice,
         unverified: isUnverified,
         savedName: name,
         savedQty: quantity,
@@ -342,7 +356,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     setFormError(null);
     clearAddRow();
     setTimeout(() => itemRef.current?.focus(), 0);
-  }, [selectedItem, itemQuery, qty, unverified, activeUnit, activeCategory]);
+  }, [selectedItem, itemQuery, qty, addPrice, unverified, activeUnit, activeCategory]);
 
   useEffect(() => {
     if (!branchId) {
@@ -444,6 +458,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             itemName: l.unverified || !l.inventoryItemId ? l.name : undefined,
             category: l.category,
             quantity: l.quantity,
+            price: parsePriceInput(l.price),
           })),
         }),
       });
@@ -661,6 +676,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
               <th className="w-14 py-1 pr-2">Unit</th>
               <th className="w-32 py-1 pr-2">Category</th>
               <th className="w-20 py-1 pr-2 text-right">Qty</th>
+              <th className="w-24 py-1 pr-2 text-right">Price (₹)</th>
               <th className="w-28 py-1 pr-2">Status</th>
             </tr>
           </thead>
@@ -757,13 +773,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                             (l.name === l.savedName ? l.savedInventoryItemId : undefined);
                           const ok = await tryStockWarning(i, itemId, l.name, quantity, false);
                           if (!ok) return;
-                          setTimeout(() => {
-                            if (i < lines.length - 1) {
-                              rowNameRefs.current[i + 1]?.focus();
-                            } else {
-                              itemRef.current?.focus();
-                            }
-                          }, 0);
+                          setTimeout(() => rowPriceRefs.current[i]?.focus(), 0);
                         })();
                         return;
                       }
@@ -773,6 +783,38 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                       }
                     }}
                     className="ml-auto h-7 w-20 text-right text-sm"
+                  />
+                </td>
+                <td className="py-1 text-right">
+                  <Input
+                    ref={(el) => {
+                      rowPriceRefs.current[i] = el;
+                    }}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={l.price}
+                    onChange={(e) => handleLinePriceChange(i, e.target.value)}
+                    onKeyDown={(e) => {
+                      onItemsHomeEnd(e);
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setTimeout(() => {
+                          if (i < lines.length - 1) {
+                            rowNameRefs.current[i + 1]?.focus();
+                          } else {
+                            itemRef.current?.focus();
+                          }
+                        }, 0);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        rowQtyRefs.current[i]?.focus();
+                      }
+                    }}
+                    className="ml-auto h-7 w-24 text-right text-sm"
                   />
                 </td>
                 <td className="py-1 pr-2 text-xs">
@@ -807,7 +849,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                   onEnterNext={() => qtyRef.current?.focus()}
                   categories={["FINISHED_GOOD", "TRADING_ITEM"]}
                   onGoBack={focusAddress}
-                  onEscape={focusLastLineQty}
+                  onEscape={focusLastLinePrice}
                 />
               </td>
               <td className="py-1 pr-2 text-sm text-muted">{activeUnitLabel}</td>
@@ -845,7 +887,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                           true
                         );
                         if (!ok) return;
-                        addLine(quantity);
+                        setTimeout(() => addPriceRef.current?.focus(), 0);
                       })();
                       return;
                     }
@@ -855,6 +897,49 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     }
                   }}
                   className="ml-auto h-7 w-20 text-right text-sm"
+                />
+              </td>
+              <td className="py-1 text-right">
+                <Input
+                  ref={addPriceRef}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={addPrice}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (isValidPriceInput(v)) setAddPrice(v);
+                  }}
+                  onKeyDown={(e) => {
+                    onItemsHomeEnd(e);
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const name = selectedItem?.name ?? itemQuery.trim();
+                      const quantity = parseInt(qty, 10);
+                      if (!name || !quantity || quantity <= 0) {
+                        itemRef.current?.focus();
+                        return;
+                      }
+                      void (async () => {
+                        const ok = await tryStockWarning(
+                          lines.length,
+                          selectedItem?.id,
+                          name,
+                          quantity,
+                          true
+                        );
+                        if (!ok) return;
+                        addLine(quantity);
+                      })();
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      qtyRef.current?.focus();
+                    }
+                  }}
+                  className="ml-auto h-7 w-24 text-right text-sm"
                 />
               </td>
               <td className="py-1 pr-2 text-right">

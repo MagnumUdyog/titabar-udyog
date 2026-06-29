@@ -8,6 +8,13 @@ import { Card } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/fetcher";
+import {
+  formatOrderPrice,
+  formatOrderAmount,
+  orderGrandTotal,
+  orderLineTotal,
+  priceFromDb,
+} from "@/lib/order-price";
 import { formatQty, shortId } from "@/lib/utils";
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton";
 
@@ -52,9 +59,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <TH>Item</TH>
                 <TH>Category</TH>
                 <TH>Qty</TH>
+                <TH>Price (₹)</TH>
+                <TH>Total (₹)</TH>
               </TR>
             </THead>
-            <SkeletonTable rows={5} cols={3} />
+            <SkeletonTable rows={5} cols={6} />
           </Table>
         </Card>
       </div>
@@ -66,6 +75,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const branch = order.branch as { name: string; code: string; address?: string; phone?: string };
   const status = order.status as string;
   const canEdit = ["PENDING", "DRAFT"].includes(status);
+  const pricedItems = items.map((item) => ({
+    quantity: Number(item.quantity),
+    price: priceFromDb(item.price),
+  }));
+  const grandTotal = orderGrandTotal(pricedItems);
 
   const handleAction = async (action: "submit" | "cancel") => {
     if (action === "cancel" && !confirm("Cancel order?")) return;
@@ -156,19 +170,35 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <th style={{ textAlign: "left", padding: "8px" }}>Item</th>
               <th style={{ textAlign: "left", padding: "8px" }}>Unit</th>
               <th style={{ textAlign: "right", padding: "8px" }}>Qty</th>
+              <th style={{ textAlign: "right", padding: "8px" }}>Price (₹)</th>
+              <th style={{ textAlign: "right", padding: "8px" }}>Total (₹)</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item, i) => (
+            {items.map((item, i) => {
+              const qty = Number(item.quantity);
+              const price = priceFromDb(item.price);
+              const lineTotal = orderLineTotal(qty, price);
+              return (
               <tr key={item.id as string} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: "8px" }}>{i + 1}</td>
                 <td style={{ padding: "8px" }}>{item.itemNameSnapshot as string}</td>
                 <td style={{ padding: "8px" }}>{item.unitSnapshot as string}</td>
-                <td style={{ padding: "8px", textAlign: "right" }}>{formatQty(Number(item.quantity))}</td>
+                <td style={{ padding: "8px", textAlign: "right" }}>{formatQty(qty)}</td>
+                <td style={{ padding: "8px", textAlign: "right" }}>
+                  {price != null ? `₹${price.toFixed(2)}` : "—"}
+                </td>
+                <td style={{ padding: "8px", textAlign: "right" }}>
+                  {lineTotal != null ? `₹${lineTotal.toFixed(2)}` : "—"}
+                </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
+        <div style={{ textAlign: "right", fontWeight: "bold", marginTop: "12px" }}>
+          Grand Total: ₹{grandTotal.toFixed(2)}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -220,19 +250,36 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <Table>
           <THead>
             <TR>
+              <TH>#</TH>
               <TH>Item</TH>
-              <TH>Category</TH>
+              <TH>Unit</TH>
               <TH>Qty</TH>
+              <TH>Price (₹)</TH>
+              <TH>Total (₹)</TH>
             </TR>
           </THead>
           <TBody>
-            {items.map((item) => (
-              <TR key={item.id as string}>
-                <TD>{item.itemNameSnapshot as string} ({item.unitSnapshot as string})</TD>
-                <TD><Badge status={item.category as string} /></TD>
-                <TD>{formatQty(Number(item.quantity))}</TD>
-              </TR>
-            ))}
+            {items.map((item, index) => {
+              const qty = Number(item.quantity);
+              const price = priceFromDb(item.price);
+              const lineTotal = orderLineTotal(qty, price);
+              return (
+                <TR key={item.id as string}>
+                  <TD>{index + 1}</TD>
+                  <TD>{item.itemNameSnapshot as string}</TD>
+                  <TD>{item.unitSnapshot as string}</TD>
+                  <TD>{formatQty(qty)}</TD>
+                  <TD>{formatOrderPrice(price)}</TD>
+                  <TD>{lineTotal != null ? formatOrderPrice(lineTotal) : "—"}</TD>
+                </TR>
+              );
+            })}
+            <TR>
+              <TD colSpan={5} className="text-right font-semibold">
+                Grand Total
+              </TD>
+              <TD className="font-semibold">{formatOrderAmount(grandTotal)}</TD>
+            </TR>
           </TBody>
         </Table>
       </Card>

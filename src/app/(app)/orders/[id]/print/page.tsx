@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/fetcher";
+import { formatOrderPrice, formatOrderAmount, orderGrandTotal, orderLineTotal } from "@/lib/order-price";
 import { formatQty } from "@/lib/utils";
 
 interface Challan {
@@ -10,7 +11,14 @@ interface Challan {
   status: string;
   branch: { name: string; code: string; address?: string; phone?: string };
   customer: { name: string; phone: string; address?: string };
-  items: Array<{ name: string; unit: string; quantity: number; price: number; lineTotal: number; category: string }>;
+  items: Array<{
+    name: string;
+    unit: string;
+    quantity: number;
+    price: number | null;
+    lineTotal: number | null;
+    category: string;
+  }>;
   totalAmount: number;
   remarks?: string;
   createdAt: string;
@@ -28,6 +36,10 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
   }, [id]);
 
   if (!challan) return <p className="p-6 text-sm text-muted">Loading challan...</p>;
+
+  const grandTotal = orderGrandTotal(
+    challan.items.map((item) => ({ quantity: item.quantity, price: item.price }))
+  );
 
   return (
     <div>
@@ -77,19 +89,34 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
               <th className="text-left">Item</th>
               <th className="w-16 px-2 text-right">Unit</th>
               <th className="w-16 px-2 text-right">Qty</th>
+              <th className="w-24 px-2 text-right">Price (₹)</th>
+              <th className="w-24 px-2 text-right">Total (₹)</th>
             </tr>
           </thead>
           <tbody>
-            {challan.items.map((item, i) => (
-              <tr key={i} className="border-b border-gray-300">
-                <td className="py-2">{i + 1}</td>
-                <td>{item.name}</td>
-                <td className="px-2 text-right">{item.unit}</td>
-                <td className="px-2 text-right">{formatQty(item.quantity)}</td>
-              </tr>
-            ))}
+            {challan.items.map((item, i) => {
+              const lineTotal = orderLineTotal(item.quantity, item.price);
+              return (
+                <tr key={i} className="border-b border-gray-300">
+                  <td className="py-2">{i + 1}</td>
+                  <td>{item.name}</td>
+                  <td className="px-2 text-right">{item.unit}</td>
+                  <td className="px-2 text-right">{formatQty(item.quantity)}</td>
+                  <td className="px-2 text-right">
+                    {item.price != null ? `₹${item.price.toFixed(2)}` : "—"}
+                  </td>
+                  <td className="px-2 text-right">
+                    {lineTotal != null ? `₹${lineTotal.toFixed(2)}` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+
+        <div className="mb-4 text-right text-sm font-bold">
+          Grand Total: {formatOrderAmount(grandTotal)}
+        </div>
 
         {challan.remarks && (
           <p className="mb-4 text-sm"><strong>Remarks:</strong> {challan.remarks}</p>

@@ -1,5 +1,6 @@
 import { StockCategory } from "@prisma/client";
 import { prisma } from "./db";
+import { normalizeOrderPrice } from "./order-price";
 import { StockError } from "./stock";
 
 export interface OrderItemInput {
@@ -7,12 +8,14 @@ export interface OrderItemInput {
   itemName?: string;
   category?: StockCategory;
   quantity: number;
+  price?: number | null;
 }
 
 export async function resolveOrderItems(items: OrderItemInput[]) {
   const resolved: Array<{
     inv: { id: string; name: string; unit: string | null; category: StockCategory };
     quantity: number;
+    price: number | null;
   }> = [];
 
   const ids = items
@@ -60,7 +63,11 @@ export async function resolveOrderItems(items: OrderItemInput[]) {
       throw new StockError("Each line needs an item from inventory or a name");
     }
 
-    resolved.push({ inv, quantity: item.quantity });
+    resolved.push({
+      inv,
+      quantity: item.quantity,
+      price: normalizeOrderPrice(item.price),
+    });
   }
 
   return resolved;

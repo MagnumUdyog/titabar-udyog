@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { assertBranchAccess, requireAuth } from "@/lib/auth";
 import { jsonOk, handleApiError } from "@/lib/api";
 import { toNumber } from "@/lib/utils";
+import { priceFromDb } from "@/lib/order-price";
 
 export async function GET(
   _req: NextRequest,
@@ -42,8 +43,11 @@ export async function GET(
         name: item.itemNameSnapshot,
         unit: item.unitSnapshot,
         quantity: toNumber(item.quantity),
-        price: toNumber(item.price),
-        lineTotal: toNumber(item.lineTotal),
+        price: priceFromDb(item.price),
+        lineTotal:
+          priceFromDb(item.price) != null
+            ? toNumber(item.quantity) * (priceFromDb(item.price) as number)
+            : null,
         category: item.category,
       })),
       totalAmount: toNumber(order.totalAmount),

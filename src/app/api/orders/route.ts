@@ -10,6 +10,7 @@ import {
 } from "@/lib/stock";
 import { OrderStatus } from "@prisma/client";
 import { resolveOrderItems } from "@/lib/orders";
+import { sumOrderTotalAmount } from "@/lib/order-price";
 import { z } from "zod";
 
 const itemSchema = z
@@ -18,6 +19,7 @@ const itemSchema = z
     itemName: z.string().optional(),
     category: z.enum(["RAW_MATERIAL", "FINISHED_GOOD", "TRADING_ITEM"]).optional(),
     quantity: z.number().positive(),
+    price: z.number().nonnegative().nullable().optional(),
   })
   .refine((i) => i.inventoryItemId || (i.itemName && i.itemName.trim()), {
     message: "Item ID or name required",
@@ -155,15 +157,22 @@ export async function POST(req: NextRequest) {
     const status = body.status || "PENDING";
 
     const order = await prisma.$transaction(async (tx) => {
-      const orderItemsData = resolvedItems.map(({ inv, quantity }) => ({
+      const orderItemsData = resolvedItems.map(({ inv, quantity, price }) => ({
         inventoryItemId: inv.id,
         category: inv.category,
         itemNameSnapshot: inv.name,
         unitSnapshot: inv.unit?.trim() || "—",
         quantity,
-        price: 0,
-        lineTotal: 0,
+        price,
+        lineTotal: price != null ? quantity * price : null,
       }));
+
+      const totalAmount = sumOrderTotalAmount(
+        orderItemsData.map((item) => ({
+          quantity: Number(item.quantity),
+          price: item.price,
+        }))
+      );
 
       const newOrder = await tx.order.create({
         data: {
@@ -174,7 +183,7 @@ export async function POST(req: NextRequest) {
           customerAddress: body.customerAddress,
           remarks: body.remarks,
           status,
-          totalAmount: 0,
+          totalAmount,
           createdByUserId: user.id,
           items: { create: orderItemsData },
         },
