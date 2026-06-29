@@ -185,6 +185,12 @@ export default function NewOrderPage() {
         }
       } else if (d.user.role === "BRANCH_USER" && d.user.branchId) {
         setBranchId(d.user.branchId);
+      } else if (d.user.role === "ADMIN") {
+        void api<{ branches: { id: string }[] }>("/api/branches").then(({ branches }) => {
+          if (branches[0]) {
+            setBranchId((current) => current || branches[0].id);
+          }
+        });
       }
       draftHydrated.current = true;
     });

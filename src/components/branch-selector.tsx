@@ -40,6 +40,15 @@ export function BranchSelector({
       .catch(() => {});
   }, [onChange]);
 
+  useEffect(() => {
+    if (allowAll || branches.length === 0) return;
+
+    const valueIsValid = value && branches.some((branch) => branch.id === value);
+    if (!valueIsValid) {
+      onChange(branches[0].id);
+    }
+  }, [allowAll, branches, value, onChange]);
+
   if (!isAdmin && branches.length === 1) {
     return null;
   }
