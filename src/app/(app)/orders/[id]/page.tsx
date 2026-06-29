@@ -119,7 +119,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         }}
       >
         <div style={{ textAlign: "center", marginBottom: "24px" }}>
-          <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "bold" }}>Titiabar Udyog</h2>
+          <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "bold" }}>Titabor Udyog</h2>
           <p style={{ margin: "4px 0", fontSize: "13px", color: "#555" }}>Delivery Challan / Receipt</p>
         </div>
 

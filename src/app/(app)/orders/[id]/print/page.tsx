@@ -38,7 +38,7 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
 
       <div className="mx-auto max-w-2xl border border-border bg-white p-8 print:max-w-none print:border-0">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold">Titiabar Udyog</h1>
+          <h1 className="text-2xl font-bold">Titabor Udyog</h1>
           <p className="text-sm text-muted">Delivery Challan / Receipt</p>
         </div>
 

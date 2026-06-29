@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Titiabar Udyog - Inventory & Orders",
+  title: "Titabor Udyog - Inventory & Orders",
   description: "Multi-branch inventory and order management system",
 };
 

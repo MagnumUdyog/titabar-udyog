@@ -42,7 +42,7 @@ export function generateStockReportPdf(opts: {
 
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
-  doc.text("Titiabar Udyog", 105, 15, { align: "center" });
+  doc.text("Titabor Udyog", 105, 15, { align: "center" });
   doc.setFontSize(11);
   doc.setFont("helvetica", "normal");
   doc.text("Stock Status Report", 105, 22, { align: "center" });

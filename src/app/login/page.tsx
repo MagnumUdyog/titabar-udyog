@@ -30,7 +30,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
       <div className="w-full max-w-sm rounded-lg border border-border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-primary">Titiabar Udyog</h1>
+        <h1 className="text-xl font-bold text-primary">Titabor Udyog</h1>
         <p className="mb-6 text-sm text-muted">Sign in to your account</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

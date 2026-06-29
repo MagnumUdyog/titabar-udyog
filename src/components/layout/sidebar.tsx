@@ -61,7 +61,7 @@ export function Sidebar({
   return (
     <aside className="no-print sticky top-0 flex h-screen w-56 shrink-0 flex-col overflow-hidden border-r border-border bg-white">
       <div className="shrink-0 border-b border-border px-4 py-4">
-        <h1 className="text-sm font-bold text-primary">Titiabar Udyog</h1>
+        <h1 className="text-sm font-bold text-primary">Titabor Udyog</h1>
         <p className="text-xs text-muted">Inventory & Orders</p>
       </div>
       <nav className="min-h-0 flex-1 space-y-0.5 overflow-hidden p-2">
