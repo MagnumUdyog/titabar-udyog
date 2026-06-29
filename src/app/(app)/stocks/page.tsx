@@ -332,7 +332,15 @@ export default function StocksPage() {
       </div>
 
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-3">
-        <BranchSelector value={branchId} onChange={(id) => { setBranchId(id); setPage(1); }} className="w-48" />
+        <BranchSelector
+          value={branchId}
+          onChange={(id) => {
+            setBranchId(id);
+            setPage(1);
+          }}
+          allowAll={false}
+          className="w-48"
+        />
         <div className="flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button

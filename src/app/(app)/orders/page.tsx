@@ -10,7 +10,8 @@ import { Card } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { BranchSelector } from "@/components/branch-selector";
-import { api } from "@/lib/fetcher";
+import { Modal } from "@/components/ui/modal";
+import { api, ApiError } from "@/lib/fetcher";
 import { SkeletonTable } from "@/components/ui/skeleton";
 
 interface Order {
@@ -24,6 +25,11 @@ interface Order {
   _count?: { items: number };
 }
 
+type ConfirmAction =
+  | { type: "cancel"; order: Order }
+  | { type: "delete"; order: Order }
+  | { type: "submit"; order: Order };
+
 export default function OrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -35,6 +41,9 @@ export default function OrdersPage() {
   const [month, setMonth] = useState("");
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [loading, setLoading] = useState(true);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -62,18 +71,104 @@ export default function OrdersPage() {
     load();
   }, [load]);
 
-  const handleAction = async (e: React.MouseEvent, id: string, action: "submit" | "cancel") => {
+  const handleAction = (e: React.MouseEvent, order: Order, action: "submit" | "cancel") => {
     e.stopPropagation();
-    if (action === "cancel" && !confirm("Cancel this order? Reserved stock will be released.")) return;
-    if (action === "submit" && !confirm("Submit order? Stock will be deducted.")) return;
-    await api(`/api/orders/${id}/${action}`, { method: "POST" });
-    load();
+    setConfirmError(null);
+    setConfirmAction({ type: action, order });
   };
+
+  const handleDelete = (e: React.MouseEvent, order: Order) => {
+    e.stopPropagation();
+    setConfirmError(null);
+    setConfirmAction({ type: "delete", order });
+  };
+
+  const closeConfirm = () => {
+    if (confirmLoading) return;
+    setConfirmAction(null);
+    setConfirmError(null);
+  };
+
+  const runConfirmAction = async () => {
+    if (!confirmAction) return;
+    setConfirmLoading(true);
+    setConfirmError(null);
+    try {
+      if (confirmAction.type === "delete") {
+        await api(`/api/orders/${confirmAction.order.id}`, { method: "DELETE" });
+      } else {
+        await api(`/api/orders/${confirmAction.order.id}/${confirmAction.type}`, {
+          method: "POST",
+        });
+      }
+      setConfirmAction(null);
+      await load();
+    } catch (err) {
+      setConfirmError(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  const confirmCopy = (() => {
+    if (!confirmAction) return null;
+    const { order } = confirmAction;
+    if (confirmAction.type === "cancel") {
+      return {
+        title: "Cancel order?",
+        message: `Cancel order ${order.orderNumber} for ${order.customerName}? Reserved stock will be released.`,
+        confirmLabel: "Cancel Order",
+        confirmVariant: "danger" as const,
+      };
+    }
+    if (confirmAction.type === "delete") {
+      return {
+        title: "Delete order?",
+        message:
+          order.status === "SUBMITTED"
+            ? `Delete order ${order.orderNumber} permanently? Stock for this order will be restored.`
+            : `Delete order ${order.orderNumber} permanently? This cannot be undone.`,
+        confirmLabel: "Delete Order",
+        confirmVariant: "danger" as const,
+      };
+    }
+    return {
+      title: "Submit order?",
+      message: `Submit order ${order.orderNumber}? Stock will be deducted from inventory.`,
+      confirmLabel: "Submit Order",
+      confirmVariant: "primary" as const,
+    };
+  })();
 
   const stopNav = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
     <div className="space-y-4">
+      <Modal
+        open={!!confirmAction}
+        onClose={closeConfirm}
+        title={confirmCopy?.title ?? "Confirm"}
+        footer={
+          <>
+            <Button variant="ghost" onClick={closeConfirm} disabled={confirmLoading}>
+              Keep Order
+            </Button>
+            <Button
+              variant={confirmCopy?.confirmVariant === "danger" ? "danger" : "primary"}
+              onClick={runConfirmAction}
+              disabled={confirmLoading}
+            >
+              {confirmLoading ? "Please wait..." : confirmCopy?.confirmLabel ?? "Confirm"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">{confirmCopy?.message}</p>
+        {confirmError && (
+          <p className="mt-3 text-sm text-red-600">{confirmError}</p>
+        )}
+      </Modal>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Orders</h1>
@@ -177,13 +272,13 @@ export default function OrdersPage() {
                       )}
                       {o.status === "PENDING" && (
                         <>
-                          <Button size="sm" onClick={(e) => handleAction(e, o.id, "submit")}>
+                          <Button size="sm" onClick={(e) => handleAction(e, o, "submit")}>
                             Submit
                           </Button>
                           <Button
                             size="sm"
                             variant="danger"
-                            onClick={(e) => handleAction(e, o.id, "cancel")}
+                            onClick={(e) => handleAction(e, o, "cancel")}
                           >
                             Cancel
                           </Button>
@@ -194,6 +289,13 @@ export default function OrdersPage() {
                           Print
                         </Button>
                       </Link>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={(e) => handleDelete(e, o)}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </TD>
                 </TR>

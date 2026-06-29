@@ -7,6 +7,7 @@ import {
   releaseOrderReservations,
   StockError,
 } from "@/lib/stock";
+import { deleteOrderAndRelatedData } from "@/lib/order-delete";
 import { resolveOrderItems } from "@/lib/orders";
 import { z } from "zod";
 
@@ -139,6 +140,35 @@ export async function PATCH(
 
     await logAudit(user.id, "UPDATE", "Order", id, existing.branchId);
     return jsonOk({ order });
+  } catch (error) {
+    if (error instanceof StockError) return jsonError(error.message, 400);
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth();
+    const { id } = await params;
+
+    const existing = await prisma.order.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, branchId: true, orderNumber: true, status: true },
+    });
+    assertBranchAccess(user, existing.branchId);
+
+    await prisma.$transaction(async (tx) => {
+      await deleteOrderAndRelatedData(tx, id, user.id);
+    });
+
+    await logAudit(user.id, "DELETE", "Order", id, existing.branchId, {
+      orderNumber: existing.orderNumber,
+      status: existing.status,
+    });
+    return jsonOk({ deleted: true, id });
   } catch (error) {
     if (error instanceof StockError) return jsonError(error.message, 400);
     return handleApiError(error);
