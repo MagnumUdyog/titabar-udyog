@@ -159,6 +159,22 @@ function StockEntryContent() {
     });
   };
 
+  const removeLine = (index: number) => {
+    setLines((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      setTimeout(() => {
+        if (next.length === 0) {
+          itemRef.current?.focus();
+        } else if (index > 0) {
+          focus(rowQtyRefs.current[Math.min(index - 1, next.length - 1)]);
+        } else {
+          focus(rowNameRefs.current[0]);
+        }
+      }, 0);
+      return next;
+    });
+  };
+
   const addLine = () => {
     const name = selectedItem?.name ?? itemQuery.trim();
     const quantity = parseFloat(qty);
@@ -305,6 +321,7 @@ function StockEntryContent() {
                 <th className="w-14 py-1 pr-2">Unit</th>
                 <th className="w-32 py-1 pr-2">Category</th>
                 <th className="w-20 py-1 pr-2 text-right">Qty</th>
+                <th className="w-20 py-1 pr-2" />
               </tr>
             </thead>
             <tbody>
@@ -380,6 +397,17 @@ function StockEntryContent() {
                       }}
                       className="ml-auto h-7 w-20 text-right text-sm"
                     />
+                  </td>
+                  <td className="py-1 pr-2 text-right">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-muted hover:text-red-600"
+                      onClick={() => removeLine(i)}
+                    >
+                      Remove
+                    </Button>
                   </td>
                 </tr>
               ))}

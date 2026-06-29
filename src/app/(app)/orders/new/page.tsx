@@ -461,11 +461,12 @@ export default function NewOrderPage() {
     const { lineIndex, requested, isAddRow } = stockWarning;
     setStockWarning(null);
     if (isAddRow) {
-      addLine(requested);
-      setTimeout(() => itemRef.current?.focus(), 0);
+      const newIndex = lines.length;
+      addLine(requested, true);
+      setTimeout(() => rowPriceRefs.current[newIndex]?.focus(), 0);
     } else {
       updateLine(lineIndex, { quantity: requested, savedQty: requested });
-      setTimeout(() => rowQtyRefs.current[lineIndex]?.focus(), 0);
+      setTimeout(() => rowPriceRefs.current[lineIndex]?.focus(), 0);
     }
   };
 
@@ -516,7 +517,7 @@ export default function NewOrderPage() {
     return () => clearTimeout(timer);
   }, [branchId, lines, stockCheckItems]);
 
-  const addLine = useCallback((overrideQty?: number) => {
+  const addLine = useCallback((overrideQty?: number, skipFocus = false) => {
     const name = selectedItem?.name ?? itemQuery.trim();
     const quantity = overrideQty ?? parseFloat(qty);
     if (!name || !quantity || quantity <= 0) {
@@ -543,7 +544,9 @@ export default function NewOrderPage() {
     ]);
     setFormError(null);
     clearAddRow();
-    setTimeout(() => itemRef.current?.focus(), 0);
+    if (!skipFocus) {
+      setTimeout(() => itemRef.current?.focus(), 0);
+    }
   }, [selectedItem, itemQuery, qty, addPrice, unverified, activeUnit, activeCategory]);
 
   useEffect(() => {
@@ -556,14 +559,15 @@ export default function NewOrderPage() {
         e.preventDefault();
         setStockWarning(null);
         if (warning.isAddRow) {
-          addLine(warning.requested);
-          setTimeout(() => itemRef.current?.focus(), 0);
+          const newIndex = lines.length;
+          addLine(warning.requested, true);
+          setTimeout(() => rowPriceRefs.current[newIndex]?.focus(), 0);
         } else {
           updateLine(warning.lineIndex, {
             quantity: warning.requested,
             savedQty: warning.requested,
           });
-          setTimeout(() => rowQtyRefs.current[warning.lineIndex]?.focus(), 0);
+          setTimeout(() => rowPriceRefs.current[warning.lineIndex]?.focus(), 0);
         }
       }
       if (e.key === "Escape") {
@@ -653,7 +657,7 @@ export default function NewOrderPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-3">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold">Create Order</h1>
         <p className="text-xs text-muted">

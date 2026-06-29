@@ -294,14 +294,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     }, 0);
   };
 
-  const focusAfterQtyConfirmed = (lineIndex: number) => {
-    setTimeout(() => {
-      if (lineIndex < lines.length - 1) {
-        rowNameRefs.current[lineIndex + 1]?.focus();
-      } else {
-        itemRef.current?.focus();
-      }
-    }, 0);
+  const focusLinePrice = (lineIndex: number) => {
+    setTimeout(() => rowPriceRefs.current[lineIndex]?.focus(), 0);
   };
 
   const confirmRequestedStock = () => {
@@ -309,11 +303,12 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     const { lineIndex, requested, isAddRow } = stockWarning;
     setStockWarning(null);
     if (isAddRow) {
-      addLine(requested);
-      setTimeout(() => itemRef.current?.focus(), 0);
+      const newIndex = lines.length;
+      addLine(requested, true);
+      focusLinePrice(newIndex);
     } else {
       updateLine(lineIndex, { quantity: requested, savedQty: requested });
-      focusAfterQtyConfirmed(lineIndex);
+      focusLinePrice(lineIndex);
     }
   };
 
@@ -329,7 +324,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     [lines]
   );
 
-  const addLine = useCallback((overrideQty?: number) => {
+  const addLine = useCallback((overrideQty?: number, skipFocus = false) => {
     const name = selectedItem?.name ?? itemQuery.trim();
     const quantity = overrideQty ?? parseFloat(qty);
     if (!name || !quantity || quantity <= 0) {
@@ -355,7 +350,9 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     ]);
     setFormError(null);
     clearAddRow();
-    setTimeout(() => itemRef.current?.focus(), 0);
+    if (!skipFocus) {
+      setTimeout(() => itemRef.current?.focus(), 0);
+    }
   }, [selectedItem, itemQuery, qty, addPrice, unverified, activeUnit, activeCategory]);
 
   useEffect(() => {
@@ -402,14 +399,15 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         e.preventDefault();
         setStockWarning(null);
         if (warning.isAddRow) {
-          addLine(warning.requested);
-          setTimeout(() => itemRef.current?.focus(), 0);
+          const newIndex = lines.length;
+          addLine(warning.requested, true);
+          setTimeout(() => rowPriceRefs.current[newIndex]?.focus(), 0);
         } else {
           updateLine(warning.lineIndex, {
             quantity: warning.requested,
             savedQty: warning.requested,
           });
-          focusAfterQtyConfirmed(warning.lineIndex);
+          setTimeout(() => rowPriceRefs.current[warning.lineIndex]?.focus(), 0);
         }
       }
       if (e.key === "Escape") {
@@ -494,7 +492,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   if (loading) return <p className="text-sm text-muted">Loading order...</p>;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-3">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold">Edit Order</h1>
         <p className="text-xs text-muted">
