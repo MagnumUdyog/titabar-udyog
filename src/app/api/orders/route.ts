@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { assertBranchAccess, requireAuth, resolveBranchId } from "@/lib/auth";
 import { jsonOk, jsonError, handleApiError, parsePagination } from "@/lib/api";
@@ -35,6 +36,29 @@ const createSchema = z.object({
   items: z.array(itemSchema).min(1),
   forceCreate: z.boolean().optional(),
 });
+
+async function createOrderWithRetry<T>(
+  branchId: string,
+  createFn: (orderNumber: string) => Promise<T>,
+  maxRetries = 3
+): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const orderNumber = await generateOrderNumber(branchId);
+    try {
+      return await createFn(orderNumber);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002" &&
+        attempt < maxRetries - 1
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Failed to create order after retries");
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -153,45 +177,46 @@ export async function POST(req: NextRequest) {
 
     const resolvedItems = await resolveOrderItems(body.items);
 
-    const orderNumber = await generateOrderNumber(branchId);
     const status = body.status || "PENDING";
 
-    const order = await prisma.$transaction(async (tx) => {
-      const orderItemsData = resolvedItems.map(({ inv, quantity, price }) => ({
-        inventoryItemId: inv.id,
-        category: inv.category,
-        itemNameSnapshot: inv.name,
-        unitSnapshot: inv.unit?.trim() || "—",
-        quantity,
-        price,
-        lineTotal: price != null ? price : null,
-      }));
+    const order = await createOrderWithRetry(branchId, async (orderNumber) =>
+      prisma.$transaction(async (tx) => {
+        const orderItemsData = resolvedItems.map(({ inv, quantity, price }) => ({
+          inventoryItemId: inv.id,
+          category: inv.category,
+          itemNameSnapshot: inv.name,
+          unitSnapshot: inv.unit?.trim() || "—",
+          quantity,
+          price,
+          lineTotal: price != null ? price : null,
+        }));
 
-      const totalAmount = sumOrderTotalAmount(
-        orderItemsData.map((item) => ({
-          price: item.price,
-        }))
-      );
+        const totalAmount = sumOrderTotalAmount(
+          orderItemsData.map((item) => ({
+            price: item.price,
+          }))
+        );
 
-      const newOrder = await tx.order.create({
-        data: {
-          branchId,
-          orderNumber,
-          customerName: body.customerName,
-          customerPhone: body.customerPhone,
-          customerAddress: body.customerAddress,
-          remarks: body.remarks,
-          status,
-          totalAmount,
-          createdByUserId: user.id,
-          items: { create: orderItemsData },
-        },
-        include: { items: true },
-      });
+        const newOrder = await tx.order.create({
+          data: {
+            branchId,
+            orderNumber,
+            customerName: body.customerName,
+            customerPhone: body.customerPhone,
+            customerAddress: body.customerAddress,
+            remarks: body.remarks,
+            status,
+            totalAmount,
+            createdByUserId: user.id,
+            items: { create: orderItemsData },
+          },
+          include: { items: true },
+        });
 
-      await logOrderStatus(tx, newOrder.id, null, status, user.id, "Order created");
-      return newOrder;
-    });
+        await logOrderStatus(tx, newOrder.id, null, status, user.id, "Order created");
+        return newOrder;
+      })
+    );
 
     await logAudit(user.id, "CREATE", "Order", order.id, branchId);
     return jsonOk({ order }, 201);

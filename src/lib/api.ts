@@ -29,6 +29,9 @@ function prismaUniqueConstraintMessage(
   if (fields.some((field) => field.includes("code"))) {
     return "This branch code is already in use. Please use a different code.";
   }
+  if (fields.some((field) => field.includes("orderNumber"))) {
+    return "Order number conflict — please try submitting again.";
+  }
 
   return "This value is already in use. Please use a different one.";
 }

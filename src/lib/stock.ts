@@ -497,10 +497,26 @@ export async function consumeOrderReservations(
 
 export async function generateOrderNumber(branchId: string): Promise<string> {
   const branch = await prisma.branch.findUniqueOrThrow({ where: { id: branchId } });
-  const count = await prisma.order.count({ where: { branchId } });
   const date = new Date();
   const ymd = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-  return `${branch.code}-${ymd}-${String(count + 1).padStart(4, "0")}`;
+  const prefix = `${branch.code}-${ymd}-`;
+
+  const lastOrder = await prisma.order.findFirst({
+    where: {
+      branchId,
+      orderNumber: { startsWith: prefix },
+    },
+    orderBy: { orderNumber: "desc" },
+  });
+
+  let nextSeq = 1;
+  if (lastOrder) {
+    const lastSeqStr = lastOrder.orderNumber.split("-").pop();
+    const lastSeq = parseInt(lastSeqStr || "0", 10);
+    nextSeq = lastSeq + 1;
+  }
+
+  return `${prefix}${String(nextSeq).padStart(4, "0")}`;
 }
 
 export async function logOrderStatus(
