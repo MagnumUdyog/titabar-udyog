@@ -44,10 +44,6 @@ export async function GET(
         unit: item.unitSnapshot,
         quantity: toNumber(item.quantity),
         price: priceFromDb(item.price),
-        lineTotal:
-          priceFromDb(item.price) != null
-            ? toNumber(item.quantity) * (priceFromDb(item.price) as number)
-            : null,
         category: item.category,
       })),
       totalAmount: toNumber(order.totalAmount),

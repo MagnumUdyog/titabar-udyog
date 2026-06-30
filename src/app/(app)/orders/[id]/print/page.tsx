@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/fetcher";
-import { formatOrderPrice, formatOrderAmount, orderGrandTotal, orderLineTotal } from "@/lib/order-price";
+import { formatOrderAmount, orderGrandTotal } from "@/lib/order-price";
 import { formatQty } from "@/lib/utils";
 
 interface Challan {
@@ -16,7 +16,6 @@ interface Challan {
     unit: string;
     quantity: number;
     price: number | null;
-    lineTotal: number | null;
     category: string;
   }>;
   totalAmount: number;
@@ -37,9 +36,7 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
 
   if (!challan) return <p className="p-6 text-sm text-muted">Loading challan...</p>;
 
-  const grandTotal = orderGrandTotal(
-    challan.items.map((item) => ({ quantity: item.quantity, price: item.price }))
-  );
+  const grandTotal = orderGrandTotal(challan.items.map((item) => ({ price: item.price })));
 
   return (
     <div>
@@ -90,13 +87,10 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
               <th className="w-16 px-2 text-right">Unit</th>
               <th className="w-16 px-2 text-right">Qty</th>
               <th className="w-24 px-2 text-right">Price (₹)</th>
-              <th className="w-24 px-2 text-right">Total (₹)</th>
             </tr>
           </thead>
           <tbody>
-            {challan.items.map((item, i) => {
-              const lineTotal = orderLineTotal(item.quantity, item.price);
-              return (
+            {challan.items.map((item, i) => (
                 <tr key={i} className="border-b border-gray-300">
                   <td className="py-2">{i + 1}</td>
                   <td>{item.name}</td>
@@ -105,12 +99,8 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
                   <td className="px-2 text-right">
                     {item.price != null ? `₹${item.price.toFixed(2)}` : "—"}
                   </td>
-                  <td className="px-2 text-right">
-                    {lineTotal != null ? `₹${lineTotal.toFixed(2)}` : "—"}
-                  </td>
                 </tr>
-              );
-            })}
+            ))}
           </tbody>
         </table>
 

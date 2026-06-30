@@ -31,32 +31,22 @@ export function formatOrderPrice(price: number | null | undefined): string {
   return `₹${price.toFixed(2)}`;
 }
 
-export function orderLineTotal(
-  qty: number,
-  price: number | null | undefined
-): number | null {
-  if (price == null || price <= 0) return null;
-  return qty * price;
-}
-
+/** Sum line totals — price is already the full line amount (not per-unit). */
 export function orderGrandTotal(
-  items: Array<{ quantity: number; price: number | null | undefined }>
+  items: Array<{ price: number | null | undefined }>
 ): number {
-  return items.reduce((sum, item) => {
-    const line = orderLineTotal(Number(item.quantity), item.price);
-    return sum + (line ?? 0);
-  }, 0);
+  return items.reduce((sum, item) => sum + (normalizeOrderPrice(item.price) ?? 0), 0);
 }
 
-export function buildOrderItemPrices(quantity: number, price: number | null) {
+export function buildOrderItemPrices(price: number | null) {
   if (price == null) {
     return { price: null, lineTotal: null };
   }
-  return { price, lineTotal: quantity * price };
+  return { price, lineTotal: price };
 }
 
 export function sumOrderTotalAmount(
-  items: Array<{ quantity: number; price: number | null }>
+  items: Array<{ price: number | null }>
 ): number {
   return orderGrandTotal(items);
 }

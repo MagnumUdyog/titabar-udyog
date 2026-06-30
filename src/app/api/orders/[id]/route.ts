@@ -107,7 +107,7 @@ export async function PATCH(
           unitSnapshot: inv.unit?.trim() || "—",
           quantity,
           price,
-          lineTotal: price != null ? quantity * price : null,
+          lineTotal: price != null ? price : null,
         }));
 
         for (const itemData of orderItemsData) {
@@ -117,7 +117,6 @@ export async function PATCH(
 
         const totalAmount = sumOrderTotalAmount(
           orderItemsData.map((item) => ({
-            quantity: Number(item.quantity),
             price: item.price,
           }))
         );
