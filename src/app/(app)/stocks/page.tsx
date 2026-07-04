@@ -22,7 +22,7 @@ import {
   type DateFilterState,
   type ReportCategory,
 } from "@/lib/stock-report-pdf";
-import { cn, formatQty, formatUnit } from "@/lib/utils";
+import { cn, formatOrderDate, formatQty, formatUnit } from "@/lib/utils";
 import { SkeletonTable } from "@/components/ui/skeleton";
 
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
@@ -549,7 +549,7 @@ export default function StocksPage() {
                     <TD className="font-medium">{formatQty(r.quantity)}</TD>
                     <TD className="text-muted">{r.createdBy}</TD>
                     <TD className="text-xs text-muted">
-                      {new Date(r.createdAt).toLocaleDateString()}
+                      {formatOrderDate(r.createdAt)}
                     </TD>
                   </TR>
                 ))}

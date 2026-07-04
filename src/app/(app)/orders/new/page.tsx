@@ -17,7 +17,7 @@ import {
 } from "@/components/orders/item-search-input";
 import { api, ApiError } from "@/lib/fetcher";
 import { isValidPriceInput, parsePriceInput } from "@/lib/order-price";
-import { cn, formatQty, formatUnit } from "@/lib/utils";
+import { cn, formatOrderDate, formatQty, formatUnit } from "@/lib/utils";
 
 interface PastOrder {
   id: string;
@@ -1198,7 +1198,7 @@ export default function NewOrderPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">
-                      {new Date(order.createdAt).toLocaleDateString()}
+                      {formatOrderDate(order.createdAt)}
                     </p>
                     <p className="mt-0.5 text-xs text-muted">
                       {order.items

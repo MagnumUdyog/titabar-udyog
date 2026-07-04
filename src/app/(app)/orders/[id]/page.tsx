@@ -14,7 +14,7 @@ import {
   orderGrandTotal,
   priceFromDb,
 } from "@/lib/order-price";
-import { formatQty, shortId } from "@/lib/utils";
+import { formatQty, shortId, formatOrderDate } from "@/lib/utils";
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -155,7 +155,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
         <div style={{ marginBottom: "16px", fontSize: "14px" }}>
           <strong>Order #:</strong> {order.orderNumber as string} &nbsp;&nbsp;
-          <strong>Date:</strong> {new Date(order.createdAt as string).toLocaleDateString()}
+          <strong>Date:</strong> {formatOrderDate(order.createdAt as string)}
           <br />
           <strong>Status:</strong> {order.status as string}
         </div>
@@ -196,6 +196,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">{order.orderNumber as string}</h1>
+          <p className="text-sm text-muted">{formatOrderDate(order.createdAt as string)}</p>
           <Badge status={status} />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -221,13 +222,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <p className="font-medium">{branch.name} ({branch.code})</p>
           <p className="text-sm text-muted">{branch.address}</p>
           <p className="text-sm text-muted">{branch.phone}</p>
+          <p className="mt-2 text-sm text-muted">
+            Date: <span className="font-medium text-foreground">{formatOrderDate(order.createdAt as string)}</span>
+          </p>
         </Card>
         <Card title="Customer">
-          <p className="font-medium">{order.customerName as string}</p>
-          <p className="text-sm">{order.customerPhone as string}</p>
-          <p className="text-sm text-muted">{order.customerAddress as string}</p>
+          <p className="text-sm text-muted">
+            Name: <span className="font-medium text-foreground">{order.customerName as string}</span>
+          </p>
+          <p className="text-sm text-muted">
+            Phone: <span className="font-medium text-foreground">{order.customerPhone as string}</span>
+          </p>
+          <p className="text-sm text-muted">
+            Address:{" "}
+            <span className="font-medium text-foreground">
+              {(order.customerAddress as string) || "—"}
+            </span>
+          </p>
           {order.remarks ? (
-            <p className="mt-2 text-sm text-muted">Remarks: {order.remarks as string}</p>
+            <p className="mt-2 text-sm text-muted">
+              Remarks: <span className="font-medium text-foreground">{order.remarks as string}</span>
+            </p>
           ) : null}
           <Button
             onClick={sendReceiptOnWhatsApp}

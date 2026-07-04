@@ -4,7 +4,7 @@ import { useEffect, useState, use } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/fetcher";
 import { formatOrderAmount, orderGrandTotal } from "@/lib/order-price";
-import { formatQty } from "@/lib/utils";
+import { formatOrderDate, formatQty } from "@/lib/utils";
 
 interface Challan {
   orderNumber: string;
@@ -72,7 +72,7 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
             <p><strong>Status:</strong> {challan.status}</p>
           </div>
           <div className="text-right">
-            <p><strong>Date:</strong> {new Date(challan.createdAt).toLocaleDateString()}</p>
+            <p><strong>Date:</strong> {formatOrderDate(challan.createdAt)}</p>
             {challan.submittedAt && (
               <p><strong>Submitted:</strong> {new Date(challan.submittedAt).toLocaleDateString()}</p>
             )}

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { BranchSelector } from "@/components/branch-selector";
 import { Modal } from "@/components/ui/modal";
 import { api, ApiError } from "@/lib/fetcher";
+import { formatOrderDate } from "@/lib/utils";
 import { SkeletonTable } from "@/components/ui/skeleton";
 
 interface Order {
@@ -260,7 +261,7 @@ export default function OrdersPage() {
                     <Badge status={o.status} />
                   </TD>
                   <TD>{o._count?.items ?? "—"}</TD>
-                  <TD className="text-xs">{new Date(o.createdAt).toLocaleDateString()}</TD>
+                  <TD className="text-xs">{formatOrderDate(o.createdAt)}</TD>
                   <TD onClick={stopNav}>
                     <div className="flex flex-wrap gap-1">
                       {["PENDING", "DRAFT"].includes(o.status) && (

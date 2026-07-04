@@ -16,7 +16,7 @@ import {
 } from "@/components/orders/item-search-input";
 import { api, ApiError } from "@/lib/fetcher";
 import { isValidPriceInput, parsePriceInput, priceFromDb } from "@/lib/order-price";
-import { formatQty, formatUnit } from "@/lib/utils";
+import { formatQty, formatUnit, formatOrderDate } from "@/lib/utils";
 
 interface OrderLine {
   inventoryItemId?: string;
@@ -62,6 +62,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
   const [loading, setLoading] = useState(true);
   const [orderNumber, setOrderNumber] = useState("");
+  const [orderDate, setOrderDate] = useState("");
   const [branchId, setBranchId] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -100,6 +101,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           return;
         }
         setOrderNumber(o.orderNumber as string);
+        setOrderDate((o.createdAt as string) || "");
         setBranchId(o.branchId as string);
         setCustomerName((o.customerName as string) || "");
         setCustomerPhone((o.customerPhone as string) || "");
@@ -497,6 +499,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         <h1 className="text-xl font-bold">Edit Order</h1>
         <p className="text-xs text-muted">
           {orderNumber ? `${orderNumber} · ` : ""}
+          {orderDate ? `${formatOrderDate(orderDate)} · ` : ""}
           Keyboard: Enter → next · Esc → clear / back
         </p>
       </div>

@@ -21,6 +21,14 @@ export function formatQty(qty: number | string) {
   }).format(n);
 }
 
+export function formatOrderDate(value: string | Date) {
+  return new Date(value).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function toNumber(value: unknown): number {
   if (value === null || value === undefined) return 0;
   if (typeof value === "number") return value;
