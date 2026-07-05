@@ -167,30 +167,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <th style={{ textAlign: "left", padding: "8px" }}>Item</th>
               <th style={{ textAlign: "left", padding: "8px" }}>Unit</th>
               <th style={{ textAlign: "right", padding: "8px" }}>Qty</th>
-              <th style={{ textAlign: "right", padding: "8px" }}>Price (₹)</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item, i) => {
               const qty = Number(item.quantity);
-              const price = priceFromDb(item.price);
               return (
               <tr key={item.id as string} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: "8px" }}>{i + 1}</td>
                 <td style={{ padding: "8px", fontWeight: 600, fontSize: "14px" }}>{item.itemNameSnapshot as string}</td>
                 <td style={{ padding: "8px" }}>{item.unitSnapshot as string}</td>
                 <td style={{ padding: "8px", textAlign: "right" }}>{formatQty(qty)}</td>
-                <td style={{ padding: "8px", textAlign: "right" }}>
-                  {price != null ? `₹${price.toFixed(2)}` : "—"}
-                </td>
               </tr>
             );
             })}
           </tbody>
         </table>
-        <div style={{ textAlign: "right", fontWeight: "bold", marginTop: "12px" }}>
-          Grand Total: ₹{grandTotal.toFixed(2)}
-        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

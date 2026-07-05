@@ -69,6 +69,7 @@ interface CreateOrderDraft {
   customerName: string;
   customerPhone: string;
   customerAddress: string;
+  remarks: string;
   lines: OrderLine[];
   itemQuery: string;
   selectedItem: InventorySearchItem | null;
@@ -115,6 +116,7 @@ export default function NewOrderPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
+  const [remarks, setRemarks] = useState("");
 
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [itemQuery, setItemQuery] = useState("");
@@ -180,6 +182,7 @@ export default function NewOrderPage() {
         setCustomerName(draft.customerName);
         setCustomerPhone(draft.customerPhone);
         setCustomerAddress(draft.customerAddress);
+        setRemarks(draft.remarks ?? "");
         setLines(draft.lines);
         setItemQuery(draft.itemQuery);
         setSelectedItem(draft.selectedItem);
@@ -208,6 +211,7 @@ export default function NewOrderPage() {
       customerName,
       customerPhone,
       customerAddress,
+      remarks,
       lines,
       itemQuery,
       selectedItem,
@@ -220,6 +224,7 @@ export default function NewOrderPage() {
     customerName,
     customerPhone,
     customerAddress,
+    remarks,
     lines,
     itemQuery,
     selectedItem,
@@ -611,6 +616,7 @@ export default function NewOrderPage() {
           customerName,
           customerPhone,
           customerAddress,
+          remarks: remarks.trim() || undefined,
           status: "PENDING",
           forceCreate,
           items: lines.map((l) => ({
@@ -1169,6 +1175,17 @@ export default function NewOrderPage() {
             </tr>
           </tbody>
         </table>
+      </Card>
+
+      <Card title="Remarks">
+        <label className="mb-0.5 block text-xs font-medium text-muted">Order remarks (optional)</label>
+        <textarea
+          value={remarks}
+          onChange={(e) => setRemarks(e.target.value)}
+          placeholder="Delivery notes, special instructions..."
+          rows={3}
+          className="flex w-full resize-y rounded-md border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-300"
+        />
       </Card>
 
       {showRecentOrders && (

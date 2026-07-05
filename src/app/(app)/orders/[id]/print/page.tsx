@@ -3,7 +3,6 @@
 import { useEffect, useState, use } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/fetcher";
-import { formatOrderAmount, orderGrandTotal } from "@/lib/order-price";
 import { formatOrderDate, formatQty } from "@/lib/utils";
 
 interface Challan {
@@ -35,8 +34,6 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
   }, [id]);
 
   if (!challan) return <p className="p-6 text-sm text-muted">Loading challan...</p>;
-
-  const grandTotal = orderGrandTotal(challan.items.map((item) => ({ price: item.price })));
 
   return (
     <div>
@@ -91,7 +88,6 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
               <th className="text-left text-xs font-bold">Item</th>
               <th className="w-16 px-2 text-right text-xs font-bold">Unit</th>
               <th className="w-16 px-2 text-right text-xs font-bold">Qty</th>
-              <th className="w-24 px-2 text-right text-xs font-bold">Price (₹)</th>
             </tr>
           </thead>
           <tbody>
@@ -101,17 +97,10 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
                   <td className="py-2 font-semibold">{item.name}</td>
                   <td className="px-2 text-right">{item.unit}</td>
                   <td className="px-2 text-right">{formatQty(item.quantity)}</td>
-                  <td className="px-2 text-right">
-                    {item.price != null ? `₹${item.price.toFixed(2)}` : "—"}
-                  </td>
                 </tr>
             ))}
           </tbody>
         </table>
-
-        <div className="mb-4 text-right text-sm font-bold">
-          Grand Total: {formatOrderAmount(grandTotal)}
-        </div>
 
         {challan.remarks && (
           <p className="mb-4 text-sm"><strong>Remarks:</strong> {challan.remarks}</p>
