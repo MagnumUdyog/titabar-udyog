@@ -177,7 +177,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               return (
               <tr key={item.id as string} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: "8px" }}>{i + 1}</td>
-                <td style={{ padding: "8px" }}>{item.itemNameSnapshot as string}</td>
+                <td style={{ padding: "8px", fontWeight: 600, fontSize: "14px" }}>{item.itemNameSnapshot as string}</td>
                 <td style={{ padding: "8px" }}>{item.unitSnapshot as string}</td>
                 <td style={{ padding: "8px", textAlign: "right" }}>{formatQty(qty)}</td>
                 <td style={{ padding: "8px", textAlign: "right" }}>
@@ -195,7 +195,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">{order.orderNumber as string}</h1>
+          <h1 className="text-xl font-semibold">{order.orderNumber as string}</h1>
           <p className="text-sm text-muted">{formatOrderDate(order.createdAt as string)}</p>
           <Badge status={status} />
         </div>
@@ -228,7 +228,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
         <Card title="Customer">
           <p className="text-sm text-muted">
-            Name: <span className="font-medium text-foreground">{order.customerName as string}</span>
+            Name: <span className="font-semibold text-foreground">{order.customerName as string}</span>
           </p>
           <p className="text-sm text-muted">
             Phone: <span className="font-medium text-foreground">{order.customerPhone as string}</span>
@@ -271,7 +271,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               return (
                 <TR key={item.id as string}>
                   <TD>{index + 1}</TD>
-                  <TD>{item.itemNameSnapshot as string}</TD>
+                  <TD className="font-semibold">{item.itemNameSnapshot as string}</TD>
                   <TD>{item.unitSnapshot as string}</TD>
                   <TD>{formatQty(qty)}</TD>
                   <TD>{formatOrderPrice(price)}</TD>
@@ -302,7 +302,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               {reservations.map((r) => (
                 <TR key={r.id as string}>
                   <TD>
-                    <span className="font-medium">{reservationItemName(r)}</span>
+                    <span className="font-semibold">{reservationItemName(r)}</span>
                     <span className="ml-2 text-xs text-muted">
                       #{shortId(r.inventoryItemId as string)}
                     </span>

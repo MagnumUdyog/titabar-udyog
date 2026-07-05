@@ -251,17 +251,17 @@ export default function OrdersPage() {
                   className="cursor-pointer"
                   onClick={() => router.push(`/orders/${o.id}`)}
                 >
-                  <TD className="font-medium text-primary">{o.orderNumber}</TD>
+                  <TD className="font-semibold text-primary">{o.orderNumber}</TD>
                   <TD>{o.branch.code}</TD>
                   <TD>
-                    <div>{o.customerName}</div>
+                    <div className="font-semibold">{o.customerName}</div>
                     <div className="text-xs text-muted">{o.customerPhone}</div>
                   </TD>
                   <TD>
                     <Badge status={o.status} />
                   </TD>
                   <TD>{o._count?.items ?? "—"}</TD>
-                  <TD className="text-xs">{formatOrderDate(o.createdAt)}</TD>
+                  <TD>{formatOrderDate(o.createdAt)}</TD>
                   <TD onClick={stopNav}>
                     <div className="flex flex-wrap gap-1">
                       {["PENDING", "DRAFT"].includes(o.status) && (

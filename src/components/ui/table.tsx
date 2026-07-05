@@ -1,9 +1,17 @@
 import { cn } from "@/lib/utils";
 
-export function Table({ children, className }: { children: React.ReactNode; className?: string }) {
+export function Table({
+  children,
+  className,
+  tableClassName,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  tableClassName?: string;
+}) {
   return (
     <div className={cn("overflow-x-auto", className)}>
-      <table className="w-full text-sm">{children}</table>
+      <table className={cn("w-full text-sm", tableClassName)}>{children}</table>
     </div>
   );
 }
@@ -33,7 +41,7 @@ export function TR({
 }
 
 export function TH({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <th className={cn("px-3 py-2 font-medium", className)}>{children}</th>;
+  return <th className={cn("px-3 py-2 text-xs font-bold", className)}>{children}</th>;
 }
 
 export function TD({
@@ -42,7 +50,7 @@ export function TD({
   ...props
 }: React.TdHTMLAttributes<HTMLTableCellElement>) {
   return (
-    <td className={cn("px-3 py-2", className)} {...props}>
+    <td className={cn("px-3 py-2 text-sm font-medium", className)} {...props}>
       {children}
     </td>
   );

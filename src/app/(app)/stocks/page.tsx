@@ -401,7 +401,7 @@ export default function StocksPage() {
                   const moq = Number(b.moq ?? (b.inventoryItem as { moq?: number }).moq ?? 0);
                   return (
                     <TR key={b.id as string}>
-                      <TD>{inv.name}</TD>
+                      <TD className="font-semibold">{inv.name}</TD>
                       <TD className="text-muted">{formatUnit(inv.unit)}</TD>
                       <TD><Badge status={b.category as string} /></TD>
                       <TD>{formatQty(Number(b.onHandQty))}</TD>
@@ -543,12 +543,12 @@ export default function StocksPage() {
                       router.push(`/orders/${r.orderId}`);
                     }}
                   >
-                    <TD className="font-medium text-primary">{r.orderNumber}</TD>
-                    <TD>{r.customerName}</TD>
+                    <TD className="font-semibold text-primary">{r.orderNumber}</TD>
+                    <TD className="font-semibold">{r.customerName}</TD>
                     <TD>{r.customerPhone}</TD>
                     <TD className="font-medium">{formatQty(r.quantity)}</TD>
                     <TD className="text-muted">{r.createdBy}</TD>
-                    <TD className="text-xs text-muted">
+                    <TD className="text-muted">
                       {formatOrderDate(r.createdAt)}
                     </TD>
                   </TR>

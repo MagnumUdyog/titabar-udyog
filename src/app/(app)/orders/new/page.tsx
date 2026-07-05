@@ -873,9 +873,9 @@ export default function NewOrderPage() {
       </Card>
 
       <Card title="Items">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm font-medium">
           <thead>
-            <tr className="border-b text-left text-xs text-muted">
+            <tr className="border-b text-left text-xs font-bold text-muted">
               <th className="w-8 py-1 pr-2">#</th>
               <th className="py-1 pr-2">Item</th>
               <th className="w-14 py-1 pr-2">Unit</th>
@@ -887,7 +887,7 @@ export default function NewOrderPage() {
           </thead>
           <tbody>
             {lines.map((l, i) => (
-              <tr key={i} className="border-b border-border/60">
+              <tr key={i} className="border-b border-border/60 text-sm font-medium">
                 <td className="py-1 pr-2 text-muted">{i + 1}</td>
                 <td className="py-1 pr-2">
                   <ItemSearchInput
@@ -947,7 +947,7 @@ export default function NewOrderPage() {
                       }
                     }}
                     onGoBack={focusAddress}
-                    className="[&_input]:h-7"
+                    className="[&_input]:h-7 [&_input]:text-sm [&_input]:font-semibold"
                   />
                 </td>
                 <td className="py-1 pr-2 text-sm text-muted">{formatUnit(l.unit)}</td>
@@ -1055,6 +1055,7 @@ export default function NewOrderPage() {
                   categories={["FINISHED_GOOD", "TRADING_ITEM"]}
                   onGoBack={focusAddress}
                   onEscape={focusLastLinePrice}
+                  className="[&_input]:h-7 [&_input]:text-sm [&_input]:font-semibold"
                 />
               </td>
               <td className="py-1 pr-2 text-sm text-muted">{activeUnitLabel}</td>
@@ -1200,7 +1201,7 @@ export default function NewOrderPage() {
                     <p className="font-medium">
                       {formatOrderDate(order.createdAt)}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted">
+                    <p className="mt-0.5 text-sm font-medium text-muted">
                       {order.items
                         .map((it) => `${it.itemName} x${formatQty(it.qty)}`)
                         .join(" · ")}

@@ -51,14 +51,14 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
           <p className="text-sm text-muted">Delivery Challan / Receipt</p>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-4 text-sm">
+        <div className="mb-6 flex justify-between gap-8 text-sm">
           <div>
             <p className="font-semibold">From:</p>
             <p>{challan.branch.name}</p>
             <p className="text-muted">{challan.branch.address}</p>
             <p className="text-muted">{challan.branch.phone}</p>
           </div>
-          <div>
+          <div className="text-right">
             <p className="font-semibold">To:</p>
             <p>{challan.customer.name}</p>
             <p>{challan.customer.phone}</p>
@@ -79,21 +79,26 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        <table className="mb-4 w-full border-collapse text-sm">
+        <div className="mb-6 text-sm">
+          <p className="font-semibold">Truck Number:</p>
+          <div className="mt-2 h-8 border-b border-black" />
+        </div>
+
+        <table className="mb-4 w-full border-collapse text-sm font-medium">
           <thead>
             <tr className="border-b-2 border-black">
-              <th className="w-8 py-2 text-left">#</th>
-              <th className="text-left">Item</th>
-              <th className="w-16 px-2 text-right">Unit</th>
-              <th className="w-16 px-2 text-right">Qty</th>
-              <th className="w-24 px-2 text-right">Price (₹)</th>
+              <th className="w-8 py-2 text-left text-xs font-bold">#</th>
+              <th className="text-left text-xs font-bold">Item</th>
+              <th className="w-16 px-2 text-right text-xs font-bold">Unit</th>
+              <th className="w-16 px-2 text-right text-xs font-bold">Qty</th>
+              <th className="w-24 px-2 text-right text-xs font-bold">Price (₹)</th>
             </tr>
           </thead>
           <tbody>
             {challan.items.map((item, i) => (
                 <tr key={i} className="border-b border-gray-300">
                   <td className="py-2">{i + 1}</td>
-                  <td>{item.name}</td>
+                  <td className="py-2 font-semibold">{item.name}</td>
                   <td className="px-2 text-right">{item.unit}</td>
                   <td className="px-2 text-right">{formatQty(item.quantity)}</td>
                   <td className="px-2 text-right">

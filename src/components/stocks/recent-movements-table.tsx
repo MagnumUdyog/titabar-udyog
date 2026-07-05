@@ -1,7 +1,8 @@
 "use client";
 
+import { Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Table, THead, TR, TH } from "@/components/ui/table";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { formatQty } from "@/lib/utils";
 
 function groupByDate(movements: Array<Record<string, unknown>>) {
@@ -42,7 +43,14 @@ export function RecentMovementsTable({
   const groups = groupByDate(movements);
 
   return (
-    <Table>
+    <Table tableClassName="table-fixed">
+      <colgroup>
+        <col style={{ width: "26%" }} />
+        <col style={{ width: "12%" }} />
+        <col />
+        <col style={{ width: "10%" }} />
+        <col style={{ width: "14%" }} />
+      </colgroup>
       <THead>
         <TR className="hover:bg-slate-50">
           <TH>Date</TH>
@@ -52,22 +60,15 @@ export function RecentMovementsTable({
           <TH>By</TH>
         </TR>
       </THead>
-      {groups.map((group, groupIndex) => {
-        const groupBg = groupIndex % 2 === 0 ? "#ffffff" : "#f3f4f6";
-        const headerBg = groupIndex % 2 === 0 ? "#e5e7eb" : "#d1d5db";
+      <TBody>
+        {groups.map((group, groupIndex) => {
+          const groupBg = groupIndex % 2 === 0 ? "#ffffff" : "#f3f4f6";
+          const headerBg = groupIndex % 2 === 0 ? "#e5e7eb" : "#d1d5db";
 
-        return (
-          <tbody key={group.dateKey}>
-            <tr>
-              <td colSpan={5} className="p-0">
-                <div
-                  style={{
-                    background: groupBg,
-                    borderRadius: "8px",
-                    marginBottom: "4px",
-                    overflow: "hidden",
-                  }}
-                >
+          return (
+            <Fragment key={group.dateKey}>
+              <TR style={{ background: groupBg }} className="hover:bg-inherit">
+                <TD colSpan={5} className="p-0">
                   <div
                     style={{
                       background: headerBg,
@@ -91,39 +92,35 @@ export function RecentMovementsTable({
                       {group.items.length} movement{group.items.length !== 1 ? "s" : ""}
                     </span>
                   </div>
-                  <table className="w-full text-sm">
-                    <tbody>
-                      {group.items.map((m, i) => {
-                        const inv = m.inventoryItem as { name: string };
-                        const by = m.createdBy as { name: string };
-                        return (
-                          <tr
-                            key={m.id as string}
-                            style={{
-                              borderBottom:
-                                i < group.items.length - 1 ? "1px solid #e9ecef" : "none",
-                            }}
-                          >
-                            <td className="px-3 py-2 text-xs">
-                              {new Date(m.createdAt as string).toLocaleString()}
-                            </td>
-                            <td className="px-3 py-2">
-                              <Badge status={m.movementType as string} />
-                            </td>
-                            <td className="px-3 py-2">{inv.name}</td>
-                            <td className="px-3 py-2">{formatQty(Number(m.quantity))}</td>
-                            <td className="px-3 py-2">{by.name}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        );
-      })}
+                </TD>
+              </TR>
+              {group.items.map((m, i) => {
+                const inv = m.inventoryItem as { name: string };
+                const by = m.createdBy as { name: string };
+                return (
+                  <TR
+                    key={m.id as string}
+                    style={{
+                      background: groupBg,
+                      borderBottom:
+                        i < group.items.length - 1 ? "1px solid #e9ecef" : undefined,
+                    }}
+                    className="hover:bg-inherit"
+                  >
+                    <TD>{new Date(m.createdAt as string).toLocaleString()}</TD>
+                    <TD>
+                      <Badge status={m.movementType as string} />
+                    </TD>
+                    <TD className="font-semibold">{inv.name}</TD>
+                    <TD>{formatQty(Number(m.quantity))}</TD>
+                    <TD>{by.name}</TD>
+                  </TR>
+                );
+              })}
+            </Fragment>
+          );
+        })}
+      </TBody>
     </Table>
   );
 }
