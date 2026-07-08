@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +80,8 @@ function movementQueryParams(
   month: string,
   year: string,
   page: number,
-  limit: number
+  limit: number,
+  day = ""
 ) {
   const params = new URLSearchParams({
     branchId,
@@ -89,8 +90,13 @@ function movementQueryParams(
   });
   if (tab !== "ALL") params.set("category", tab);
   if (debouncedSearch) params.set("search", debouncedSearch);
-  if (month) params.set("month", month);
-  if (year) params.set("year", year);
+  if (day) {
+    params.set("dateFrom", `${day}T00:00:00.000`);
+    params.set("dateTo", `${day}T23:59:59.999`);
+  } else {
+    if (month) params.set("month", month);
+    if (year) params.set("year", year);
+  }
   return params;
 }
 
@@ -103,6 +109,9 @@ export default function StocksPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [day, setDay] = useState("");
+  const [datePopupOpen, setDatePopupOpen] = useState(false);
+  const datePopupRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [balances, setBalances] = useState<Array<Record<string, unknown>>>([]);
@@ -207,7 +216,8 @@ export default function StocksPage() {
           month,
           year,
           pageNum,
-          MOVEMENTS_PAGE_SIZE
+          MOVEMENTS_PAGE_SIZE,
+          day
         );
         const data = await api<{
           movements: Array<Record<string, unknown>>;
@@ -224,8 +234,19 @@ export default function StocksPage() {
         setLoadingMoreMovements(false);
       }
     },
-    [branchId, tab, debouncedSearch, month, year]
+    [branchId, tab, debouncedSearch, month, year, day]
   );
+
+  useEffect(() => {
+    if (!datePopupOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (datePopupRef.current && !datePopupRef.current.contains(e.target as Node)) {
+        setDatePopupOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [datePopupOpen]);
 
   useEffect(() => {
     loadBalances();
@@ -385,15 +406,110 @@ export default function StocksPage() {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="w-56"
         />
-        <Select value={month} onChange={(e) => setMonth(e.target.value)} className="w-32">
-          <option value="">All Months</option>
-          {Array.from({ length: 12 }, (_, i) => (
-            <option key={i + 1} value={String(i + 1)}>
-              {new Date(2000, i).toLocaleString("en", { month: "short" })}
-            </option>
-          ))}
-        </Select>
-        <Input type="number" value={year} onChange={(e) => setYear(e.target.value)} className="w-24" placeholder="Year" />
+        <div className="relative" ref={datePopupRef}>
+          <button
+            type="button"
+            onClick={() => setDatePopupOpen((o) => !o)}
+            className={cn(
+              "flex h-9 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm outline-none hover:bg-slate-50 focus:ring-2 focus:ring-primary/30",
+              (day || month) && "border-primary text-primary"
+            )}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span>
+              {day
+                ? formatOrderDate(day)
+                : month && year
+                  ? `${new Date(2000, Number(month) - 1).toLocaleString("en", { month: "short" })} ${year}`
+                  : year
+                    ? year
+                    : "All dates"}
+            </span>
+          </button>
+
+          {datePopupOpen && (
+            <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-border bg-white p-3 shadow-lg">
+              <p className="mb-2 text-xs font-semibold uppercase text-muted">Filter movements by date</p>
+
+              <label className="mb-1 block text-xs font-medium text-muted">Specific day</label>
+              <Input
+                type="date"
+                value={day}
+                onChange={(e) => {
+                  setDay(e.target.value);
+                  if (e.target.value) setMonth("");
+                }}
+                className="w-full"
+              />
+
+              <div className="my-3 flex items-center gap-2 text-xs text-muted">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              <label className="mb-1 block text-xs font-medium text-muted">Month & Year</label>
+              <div className="flex gap-2">
+                <Select
+                  value={month}
+                  onChange={(e) => {
+                    setMonth(e.target.value);
+                    if (e.target.value) setDay("");
+                  }}
+                  className="flex-1"
+                >
+                  <option value="">All Months</option>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={String(i + 1)}>
+                      {new Date(2000, i).toLocaleString("en", { month: "short" })}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  type="number"
+                  value={year}
+                  onChange={(e) => {
+                    setYear(e.target.value);
+                    setDay("");
+                  }}
+                  className="w-24"
+                  placeholder="Year"
+                />
+              </div>
+
+              <div className="mt-3 flex justify-between">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setDay("");
+                    setMonth("");
+                    setYear("");
+                  }}
+                >
+                  All dates
+                </Button>
+                <Button size="sm" onClick={() => setDatePopupOpen(false)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {!branchId ? (
@@ -471,7 +587,15 @@ export default function StocksPage() {
             )}
           </Card>
 
-          <Card title="Recent Movements">
+          <Card
+            title={
+              day
+                ? `Movements — ${formatOrderDate(day)}`
+                : month && year
+                  ? `Movements — ${new Date(2000, Number(month) - 1).toLocaleString("en", { month: "short" })} ${year}`
+                  : "Recent Movements"
+            }
+          >
             {movementsLoading ? (
               <Table>
                 <THead>
