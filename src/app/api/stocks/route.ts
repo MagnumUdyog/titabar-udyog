@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { assertBranchAccess, requireAuth, resolveBranchId } from "@/lib/auth";
 import { jsonOk, handleApiError } from "@/lib/api";
-import { buildStockItemSearchFilter, parseStocksPagination } from "@/lib/stock-movement-filters";
+import { buildStockItemSearchFilter, parseStocksPagination, passesStockAvailabilityFilter, type StockAvailabilityFilter } from "@/lib/stock-movement-filters";
 import { StockCategory } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
@@ -17,6 +17,17 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get("category") as StockCategory | null;
     const itemId = searchParams.get("itemId");
     const search = searchParams.get("search") || "";
+    const isExport = searchParams.get("export") === "true";
+    const stockFilter: StockAvailabilityFilter =
+      searchParams.get("stockFilter") === "low"
+        ? "low"
+        : searchParams.get("stockFilter") === "all"
+          ? "all"
+          : searchParams.get("stockFilter") === "available"
+            ? "available"
+            : isExport
+              ? "all"
+              : "available";
     const isSqlite = process.env.DATABASE_URL?.startsWith("file:") ?? false;
     const searchFilter = buildStockItemSearchFilter(search, isSqlite);
 
@@ -32,18 +43,21 @@ export async function GET(req: NextRequest) {
       select: { id: true, name: true, code: true },
     });
 
-    const [items, total] = await Promise.all([
+    const usePostFilter = stockFilter !== "all";
+
+    const [items, dbTotal] = await Promise.all([
       prisma.inventoryItem.findMany({
         where: itemWhere,
         orderBy: { name: "asc" },
-        skip,
-        take: limit,
+        ...(usePostFilter ? {} : { skip, take: limit }),
       }),
-      prisma.inventoryItem.count({ where: itemWhere }),
+      usePostFilter
+        ? Promise.resolve(0)
+        : prisma.inventoryItem.count({ where: itemWhere }),
     ]);
 
     const itemIds = items.map((i) => i.id);
-    const [balances, pendingReservedRows] = await Promise.all([
+    const [stockBalanceRows, pendingReservedRows] = await Promise.all([
       prisma.stockBalance.findMany({
         where: {
           branchId,
@@ -65,7 +79,7 @@ export async function GET(req: NextRequest) {
         : Promise.resolve([]),
     ]);
 
-    const balanceMap = new Map(balances.map((b) => [b.inventoryItemId, b]));
+    const balanceMap = new Map(stockBalanceRows.map((b) => [b.inventoryItemId, b]));
     const pendingReservedMap = new Map(
       pendingReservedRows.map((row) => [row.inventoryItemId, Number(row._sum.quantity ?? 0)])
     );
@@ -88,7 +102,18 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return jsonOk({ balances: mergedBalances, total, page, limit });
+    const filteredBalances = usePostFilter
+      ? mergedBalances.filter((row) =>
+          passesStockAvailabilityFilter(row.availableQty, row.moq, stockFilter)
+        )
+      : mergedBalances;
+
+    const total = usePostFilter ? filteredBalances.length : dbTotal;
+    const balances = usePostFilter
+      ? filteredBalances.slice(skip, skip + limit)
+      : filteredBalances;
+
+    return jsonOk({ balances, total, page, limit });
   } catch (error) {
     return handleApiError(error);
   }

@@ -1,5 +1,17 @@
 import { StockCategory } from "@prisma/client";
 
+export type StockAvailabilityFilter = "available" | "low" | "all";
+
+export function passesStockAvailabilityFilter(
+  availableQty: number,
+  moq: number,
+  filter: StockAvailabilityFilter
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "low") return availableQty <= moq;
+  return availableQty > 0;
+}
+
 export function buildStockItemSearchFilter(
   search: string,
   isSqlite: boolean

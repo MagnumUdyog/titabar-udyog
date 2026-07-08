@@ -27,6 +27,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
 type TabKey = Category | "ALL";
+type StockFilterKey = "available" | "low" | "all";
 
 const PAGE_SIZE = 50;
 const MOVEMENTS_PAGE_SIZE = 20;
@@ -55,6 +56,12 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "RAW_MATERIAL", label: "Raw Materials" },
   { key: "FINISHED_GOOD", label: "Finished Goods" },
   { key: "TRADING_ITEM", label: "Trading Items" },
+];
+
+const STOCK_FILTERS: { key: StockFilterKey; label: string }[] = [
+  { key: "available", label: "Available Stock" },
+  { key: "low", label: "Low Stock" },
+  { key: "all", label: "All" },
 ];
 
 const defaultDateFilter = (): DateFilterState => ({
@@ -91,6 +98,7 @@ export default function StocksPage() {
   const router = useRouter();
   const [branchId, setBranchId] = useState("");
   const [tab, setTab] = useState<TabKey>("ALL");
+  const [stockFilter, setStockFilter] = useState<StockFilterKey>("available");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [month, setMonth] = useState("");
@@ -164,6 +172,7 @@ export default function StocksPage() {
     });
     if (tab !== "ALL") params.set("category", tab);
     if (debouncedSearch) params.set("search", debouncedSearch);
+    params.set("stockFilter", stockFilter);
 
     try {
       const data = await api<{
@@ -175,7 +184,7 @@ export default function StocksPage() {
     } finally {
       setLoading(false);
     }
-  }, [branchId, tab, debouncedSearch, page]);
+  }, [branchId, tab, stockFilter, debouncedSearch, page]);
 
   const loadMovements = useCallback(
     async (pageNum: number, append: boolean) => {
@@ -313,7 +322,16 @@ export default function StocksPage() {
           <h1 className="text-xl font-bold">Stock Status</h1>
           <p className="text-sm text-muted">Live stock balances and movement history</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <BranchSelector
+            value={branchId}
+            onChange={(id) => {
+              setBranchId(id);
+              setPage(1);
+            }}
+            allowAll={false}
+            className="w-48"
+          />
           <Button
             variant="secondary"
             className="border-primary text-primary hover:bg-primary/5"
@@ -332,15 +350,6 @@ export default function StocksPage() {
       </div>
 
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-3">
-        <BranchSelector
-          value={branchId}
-          onChange={(id) => {
-            setBranchId(id);
-            setPage(1);
-          }}
-          allowAll={false}
-          className="w-48"
-        />
         <div className="flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button
@@ -356,6 +365,20 @@ export default function StocksPage() {
             </button>
           ))}
         </div>
+        <Select
+          value={stockFilter}
+          onChange={(e) => {
+            setStockFilter(e.target.value as StockFilterKey);
+            setPage(1);
+          }}
+          className="w-40"
+        >
+          {STOCK_FILTERS.map((f) => (
+            <option key={f.key} value={f.key}>
+              {f.label}
+            </option>
+          ))}
+        </Select>
         <Input
           placeholder="Search name or sub-heading..."
           value={search}
