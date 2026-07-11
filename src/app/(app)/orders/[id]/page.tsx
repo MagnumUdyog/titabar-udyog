@@ -8,12 +8,6 @@ import { Card } from "@/components/ui/card";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/fetcher";
-import {
-  formatOrderPrice,
-  formatOrderAmount,
-  orderGrandTotal,
-  priceFromDb,
-} from "@/lib/order-price";
 import { formatQty, shortId, formatOrderDate } from "@/lib/utils";
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton";
 
@@ -55,10 +49,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <Table>
             <THead>
               <TR>
+                <TH>#</TH>
                 <TH>Item</TH>
-                <TH>Category</TH>
+                <TH>Unit</TH>
                 <TH>Qty</TH>
-                <TH>Price (₹)</TH>
+                <TH>Remarks</TH>
               </TR>
             </THead>
             <SkeletonTable rows={5} cols={5} />
@@ -73,10 +68,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const branch = order.branch as { name: string; code: string; address?: string; phone?: string };
   const status = order.status as string;
   const canEdit = ["PENDING", "DRAFT"].includes(status);
-  const pricedItems = items.map((item) => ({
-    price: priceFromDb(item.price),
-  }));
-  const grandTotal = orderGrandTotal(pricedItems);
 
   const handleAction = async (action: "submit" | "cancel") => {
     if (action === "cancel" && !confirm("Cancel order?")) return;
@@ -253,29 +244,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <TH>Item</TH>
               <TH>Unit</TH>
               <TH>Qty</TH>
-              <TH>Price (₹)</TH>
+              <TH>Remarks</TH>
             </TR>
           </THead>
           <TBody>
             {items.map((item, index) => {
               const qty = Number(item.quantity);
-              const price = priceFromDb(item.price);
+              const itemRemarks = (item.remarks as string) || "";
               return (
                 <TR key={item.id as string}>
                   <TD>{index + 1}</TD>
                   <TD className="font-semibold">{item.itemNameSnapshot as string}</TD>
                   <TD>{item.unitSnapshot as string}</TD>
                   <TD>{formatQty(qty)}</TD>
-                  <TD>{formatOrderPrice(price)}</TD>
+                  <TD>{itemRemarks || "—"}</TD>
                 </TR>
               );
             })}
-            <TR>
-              <TD colSpan={4} className="text-right font-semibold">
-                Grand Total
-              </TD>
-              <TD className="font-semibold">{formatOrderAmount(grandTotal)}</TD>
-            </TR>
           </TBody>
         </Table>
       </Card>

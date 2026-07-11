@@ -16,7 +16,6 @@ import {
   type InventorySearchItem,
 } from "@/components/orders/item-search-input";
 import { api, ApiError } from "@/lib/fetcher";
-import { isValidPriceInput, parsePriceInput } from "@/lib/order-price";
 import { cn, formatOrderDate, formatQty, formatUnit } from "@/lib/utils";
 
 interface PastOrder {
@@ -42,7 +41,7 @@ interface OrderLine {
   unit: string;
   category: string;
   quantity: number;
-  price: string;
+  remarks: string;
   unverified: boolean;
   savedName: string;
   savedQty: number;
@@ -69,7 +68,6 @@ interface CreateOrderDraft {
   customerName: string;
   customerPhone: string;
   customerAddress: string;
-  remarks: string;
   lines: OrderLine[];
   itemQuery: string;
   selectedItem: InventorySearchItem | null;
@@ -102,10 +100,10 @@ export default function NewOrderPage() {
   const addressRef = useRef<HTMLInputElement>(null);
   const itemRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
-  const addPriceRef = useRef<HTMLInputElement>(null);
+  const addRemarksRef = useRef<HTMLInputElement>(null);
   const rowNameRefs = useRef<(HTMLInputElement | null)[]>([]);
   const rowQtyRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const rowPriceRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const rowRemarksRefs = useRef<(HTMLInputElement | null)[]>([]);
   const addRef = useRef<HTMLButtonElement>(null);
   const recentOrdersRef = useRef<HTMLDivElement>(null);
   const phoneCache = useRef(new Map<string, CustomerData>());
@@ -116,14 +114,13 @@ export default function NewOrderPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
-  const [remarks, setRemarks] = useState("");
 
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [itemQuery, setItemQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<InventorySearchItem | null>(null);
   const [unverified, setUnverified] = useState(false);
   const [qty, setQty] = useState("");
-  const [addPrice, setAddPrice] = useState("");
+  const [addRemarks, setAddRemarks] = useState("");
 
   const [recentOrders, setRecentOrders] = useState<PastOrder[]>([]);
   const [customerLookupDone, setCustomerLookupDone] = useState(false);
@@ -182,7 +179,6 @@ export default function NewOrderPage() {
         setCustomerName(draft.customerName);
         setCustomerPhone(draft.customerPhone);
         setCustomerAddress(draft.customerAddress);
-        setRemarks(draft.remarks ?? "");
         setLines(draft.lines);
         setItemQuery(draft.itemQuery);
         setSelectedItem(draft.selectedItem);
@@ -211,7 +207,6 @@ export default function NewOrderPage() {
       customerName,
       customerPhone,
       customerAddress,
-      remarks,
       lines,
       itemQuery,
       selectedItem,
@@ -224,7 +219,6 @@ export default function NewOrderPage() {
     customerName,
     customerPhone,
     customerAddress,
-    remarks,
     lines,
     itemQuery,
     selectedItem,
@@ -248,7 +242,7 @@ export default function NewOrderPage() {
         unit: item.unit,
         category: item.category,
         quantity: item.qty,
-        price: "",
+        remarks: "",
         unverified: false,
         savedName: item.itemName,
         savedQty: item.qty,
@@ -324,7 +318,7 @@ export default function NewOrderPage() {
     setSelectedItem(null);
     setUnverified(false);
     setQty("");
-    setAddPrice("");
+    setAddRemarks("");
   };
 
   const focusAddress = () => {
@@ -336,14 +330,9 @@ export default function NewOrderPage() {
     else itemRef.current?.focus();
   };
 
-  const focusLastLinePrice = () => {
-    if (lines.length > 0) rowPriceRefs.current[lines.length - 1]?.focus();
+  const focusLastLineRemarks = () => {
+    if (lines.length > 0) rowRemarksRefs.current[lines.length - 1]?.focus();
     else focusAddress();
-  };
-
-  const handleLinePriceChange = (index: number, rawValue: string) => {
-    if (!isValidPriceInput(rawValue)) return;
-    updateLine(index, { price: rawValue });
   };
 
   const tryStockWarning = async (
@@ -468,10 +457,10 @@ export default function NewOrderPage() {
     if (isAddRow) {
       const newIndex = lines.length;
       addLine(requested, true);
-      setTimeout(() => rowPriceRefs.current[newIndex]?.focus(), 0);
+      setTimeout(() => rowRemarksRefs.current[newIndex]?.focus(), 0);
     } else {
       updateLine(lineIndex, { quantity: requested, savedQty: requested });
-      setTimeout(() => rowPriceRefs.current[lineIndex]?.focus(), 0);
+      setTimeout(() => rowRemarksRefs.current[lineIndex]?.focus(), 0);
     }
   };
 
@@ -539,7 +528,7 @@ export default function NewOrderPage() {
         unit: activeUnit ?? "",
         category: activeCategory || "TRADING_ITEM",
         quantity,
-        price: addPrice,
+        remarks: addRemarks,
         unverified: isUnverified,
         savedName: name,
         savedQty: quantity,
@@ -552,7 +541,7 @@ export default function NewOrderPage() {
     if (!skipFocus) {
       setTimeout(() => itemRef.current?.focus(), 0);
     }
-  }, [selectedItem, itemQuery, qty, addPrice, unverified, activeUnit, activeCategory]);
+  }, [selectedItem, itemQuery, qty, addRemarks, unverified, activeUnit, activeCategory]);
 
   useEffect(() => {
     if (!stockWarning) return;
@@ -566,13 +555,13 @@ export default function NewOrderPage() {
         if (warning.isAddRow) {
           const newIndex = lines.length;
           addLine(warning.requested, true);
-          setTimeout(() => rowPriceRefs.current[newIndex]?.focus(), 0);
+          setTimeout(() => rowRemarksRefs.current[newIndex]?.focus(), 0);
         } else {
           updateLine(warning.lineIndex, {
             quantity: warning.requested,
             savedQty: warning.requested,
           });
-          setTimeout(() => rowPriceRefs.current[warning.lineIndex]?.focus(), 0);
+          setTimeout(() => rowRemarksRefs.current[warning.lineIndex]?.focus(), 0);
         }
       }
       if (e.key === "Escape") {
@@ -616,7 +605,6 @@ export default function NewOrderPage() {
           customerName,
           customerPhone,
           customerAddress,
-          remarks: remarks.trim() || undefined,
           status: "PENDING",
           forceCreate,
           items: lines.map((l) => ({
@@ -624,7 +612,7 @@ export default function NewOrderPage() {
             itemName: l.unverified || !l.inventoryItemId ? l.name : undefined,
             category: l.category,
             quantity: l.quantity,
-            price: parsePriceInput(l.price),
+            remarks: l.remarks.trim() || null,
           })),
         }),
       });
@@ -887,7 +875,7 @@ export default function NewOrderPage() {
               <th className="w-14 py-1 pr-2">Unit</th>
               <th className="w-32 py-1 pr-2">Category</th>
               <th className="w-20 py-1 pr-2 text-right">Qty</th>
-              <th className="w-24 py-1 pr-2 text-right">Price (₹)</th>
+              <th className="w-32 py-1 pr-2">Remarks</th>
               <th className="w-28 py-1 pr-2">Status</th>
             </tr>
           </thead>
@@ -984,7 +972,7 @@ export default function NewOrderPage() {
                             (l.name === l.savedName ? l.savedInventoryItemId : undefined);
                           const ok = await tryStockWarning(i, itemId, l.name, quantity, false);
                           if (!ok) return;
-                          setTimeout(() => rowPriceRefs.current[i]?.focus(), 0);
+                          setTimeout(() => rowRemarksRefs.current[i]?.focus(), 0);
                         })();
                         return;
                       }
@@ -996,16 +984,15 @@ export default function NewOrderPage() {
                     className="ml-auto h-7 w-20 text-right text-sm"
                   />
                 </td>
-                <td className="py-1 text-right">
+                <td className="py-1 pr-2">
                   <Input
                     ref={(el) => {
-                      rowPriceRefs.current[i] = el;
+                      rowRemarksRefs.current[i] = el;
                     }}
                     type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    value={l.price}
-                    onChange={(e) => handleLinePriceChange(i, e.target.value)}
+                    placeholder="Remarks"
+                    value={l.remarks}
+                    onChange={(e) => updateLine(i, { remarks: e.target.value })}
                     onKeyDown={(e) => {
                       onItemsHomeEnd(e);
                       if (e.key === "Enter") {
@@ -1025,7 +1012,7 @@ export default function NewOrderPage() {
                         rowQtyRefs.current[i]?.focus();
                       }
                     }}
-                    className="ml-auto h-7 w-24 text-right text-sm"
+                    className="h-7 text-sm"
                   />
                 </td>
                 <td className="py-1 pr-2 text-xs">
@@ -1060,7 +1047,7 @@ export default function NewOrderPage() {
                   onEnterNext={() => qtyRef.current?.focus()}
                   categories={["FINISHED_GOOD", "TRADING_ITEM"]}
                   onGoBack={focusAddress}
-                  onEscape={focusLastLinePrice}
+                  onEscape={focusLastLineRemarks}
                   className="[&_input]:h-7 [&_input]:text-sm [&_input]:font-semibold"
                 />
               </td>
@@ -1099,7 +1086,7 @@ export default function NewOrderPage() {
                           true
                         );
                         if (!ok) return;
-                        setTimeout(() => addPriceRef.current?.focus(), 0);
+                        setTimeout(() => addRemarksRef.current?.focus(), 0);
                       })();
                       return;
                     }
@@ -1111,17 +1098,13 @@ export default function NewOrderPage() {
                   className="ml-auto h-7 w-20 text-right text-sm"
                 />
               </td>
-              <td className="py-1 text-right">
+              <td className="py-1 pr-2">
                 <Input
-                  ref={addPriceRef}
+                  ref={addRemarksRef}
                   type="text"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={addPrice}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (isValidPriceInput(v)) setAddPrice(v);
-                  }}
+                  placeholder="Remarks"
+                  value={addRemarks}
+                  onChange={(e) => setAddRemarks(e.target.value)}
                   onKeyDown={(e) => {
                     onItemsHomeEnd(e);
                     if (e.key === "Enter") {
@@ -1151,7 +1134,7 @@ export default function NewOrderPage() {
                       qtyRef.current?.focus();
                     }
                   }}
-                  className="ml-auto h-7 w-24 text-right text-sm"
+                  className="h-7 text-sm"
                 />
               </td>
               <td className="py-1 pr-2 text-right">
@@ -1175,17 +1158,6 @@ export default function NewOrderPage() {
             </tr>
           </tbody>
         </table>
-      </Card>
-
-      <Card title="Remarks">
-        <label className="mb-0.5 block text-xs font-medium text-muted">Order remarks (optional)</label>
-        <textarea
-          value={remarks}
-          onChange={(e) => setRemarks(e.target.value)}
-          placeholder="Delivery notes, special instructions..."
-          rows={3}
-          className="flex w-full resize-y rounded-md border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-300"
-        />
       </Card>
 
       {showRecentOrders && (
