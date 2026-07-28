@@ -59,7 +59,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const rowPerItemRefs = useRef<(HTMLInputElement | null)[]>([]);
   const rowRemarksRefs = useRef<(HTMLInputElement | null)[]>([]);
   const addRef = useRef<HTMLButtonElement>(null);
-  const addPerItemRef = useRef<HTMLInputElement>(null);
   const stockWarningModalRef = useRef<HTMLDivElement>(null);
   const itemNotFoundModalRef = useRef<HTMLDivElement>(null);
 
