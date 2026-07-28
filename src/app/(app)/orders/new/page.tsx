@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Modal } from "@/components/ui/modal";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { BranchSelector } from "@/components/branch-selector";
 import {
   CustomerSearchInput,
@@ -41,12 +43,23 @@ interface OrderLine {
   unit: string;
   category: string;
   quantity: number;
+  perItem: string;
   remarks: string;
   unverified: boolean;
   savedName: string;
   savedQty: number;
   savedInventoryItemId?: string;
   savedUnverified: boolean;
+}
+
+interface ReservationRow {
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  quantity: number;
+  createdAt: string;
+  createdBy: string;
 }
 
 interface OrderStockWarning {
@@ -103,8 +116,10 @@ export default function NewOrderPage() {
   const addRemarksRef = useRef<HTMLInputElement>(null);
   const rowNameRefs = useRef<(HTMLInputElement | null)[]>([]);
   const rowQtyRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const rowPerItemRefs = useRef<(HTMLInputElement | null)[]>([]);
   const rowRemarksRefs = useRef<(HTMLInputElement | null)[]>([]);
   const addRef = useRef<HTMLButtonElement>(null);
+  const addPerItemRef = useRef<HTMLInputElement>(null);
   const recentOrdersRef = useRef<HTMLDivElement>(null);
   const phoneCache = useRef(new Map<string, CustomerData>());
   const draftHydrated = useRef(false);
@@ -120,6 +135,7 @@ export default function NewOrderPage() {
   const [selectedItem, setSelectedItem] = useState<InventorySearchItem | null>(null);
   const [unverified, setUnverified] = useState(false);
   const [qty, setQty] = useState("");
+  const [addPerItem, setAddPerItem] = useState("");
   const [addRemarks, setAddRemarks] = useState("");
 
   const [recentOrders, setRecentOrders] = useState<PastOrder[]>([]);
@@ -144,6 +160,15 @@ export default function NewOrderPage() {
   } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [recentItemAvailability, setRecentItemAvailability] = useState<Record<string, number>>({});
+  const [reservationModal, setReservationModal] = useState<{
+    itemId: string;
+    itemName: string;
+    itemUnit: string;
+    loading: boolean;
+    reservations: ReservationRow[];
+    totalReserved: number;
+  } | null>(null);
 
   const phoneDigits = customerPhone.replace(/\D/g, "");
   const showRecentOrders = phoneDigits.length >= 10 && customerLookupDone;
@@ -179,7 +204,7 @@ export default function NewOrderPage() {
         setCustomerName(draft.customerName);
         setCustomerPhone(draft.customerPhone);
         setCustomerAddress(draft.customerAddress);
-        setLines(draft.lines);
+        setLines(draft.lines.map((l) => ({ ...l, perItem: l.perItem ?? "" })));
         setItemQuery(draft.itemQuery);
         setSelectedItem(draft.selectedItem);
         setUnverified(draft.unverified);
@@ -242,6 +267,7 @@ export default function NewOrderPage() {
         unit: item.unit,
         category: item.category,
         quantity: item.qty,
+        perItem: "",
         remarks: "",
         unverified: false,
         savedName: item.itemName,
@@ -318,6 +344,7 @@ export default function NewOrderPage() {
     setSelectedItem(null);
     setUnverified(false);
     setQty("");
+    setAddPerItem("");
     setAddRemarks("");
   };
 
@@ -331,7 +358,7 @@ export default function NewOrderPage() {
   };
 
   const focusLastLineRemarks = () => {
-    if (lines.length > 0) rowRemarksRefs.current[lines.length - 1]?.focus();
+    if (lines.length > 0) rowPerItemRefs.current[lines.length - 1]?.focus();
     else focusAddress();
   };
 
@@ -457,10 +484,10 @@ export default function NewOrderPage() {
     if (isAddRow) {
       const newIndex = lines.length;
       addLine(requested, true);
-      setTimeout(() => rowRemarksRefs.current[newIndex]?.focus(), 0);
+      setTimeout(() => rowPerItemRefs.current[newIndex]?.focus(), 0);
     } else {
       updateLine(lineIndex, { quantity: requested, savedQty: requested });
-      setTimeout(() => rowRemarksRefs.current[lineIndex]?.focus(), 0);
+      setTimeout(() => rowPerItemRefs.current[lineIndex]?.focus(), 0);
     }
   };
 
@@ -511,6 +538,99 @@ export default function NewOrderPage() {
     return () => clearTimeout(timer);
   }, [branchId, lines, stockCheckItems]);
 
+  const recentOrderRows = recentOrders.flatMap((order) =>
+    order.items.map((item, itemIdx) => ({
+      orderId: order.id,
+      orderDate: order.createdAt,
+      itemId: item.itemId,
+      itemName: item.itemName,
+      unit: item.unit,
+      qty: item.qty,
+      isFirstInOrder: itemIdx === 0,
+      isLastInOrder: itemIdx === order.items.length - 1,
+    }))
+  );
+
+  useEffect(() => {
+    if (!branchId || recentOrderRows.length === 0) {
+      setRecentItemAvailability({});
+      return;
+    }
+    const byId = new Map<string, { inventoryItemId: string; quantity: number; itemName: string }>();
+    for (const row of recentOrderRows) {
+      if (!row.itemId) continue;
+      const existing = byId.get(row.itemId);
+      if (!existing || row.qty > existing.quantity) {
+        byId.set(row.itemId, {
+          inventoryItemId: row.itemId,
+          quantity: row.qty,
+          itemName: row.itemName,
+        });
+      }
+    }
+    const items = Array.from(byId.values());
+    if (items.length === 0) {
+      setRecentItemAvailability({});
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const data = await api<{ availability: Record<string, number> }>(
+          "/api/orders/stock-warnings",
+          {
+            method: "POST",
+            body: JSON.stringify({ branchId, items }),
+          }
+        );
+        setRecentItemAvailability(data.availability);
+      } catch {
+        setRecentItemAvailability({});
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [branchId, recentOrders]);
+
+  const openReservationModal = async (
+    itemId: string,
+    itemName: string,
+    itemUnit: string
+  ) => {
+    if (!branchId) return;
+    setReservationModal({
+      itemId,
+      itemName,
+      itemUnit,
+      loading: true,
+      reservations: [],
+      totalReserved: 0,
+    });
+    try {
+      const data = await api<{
+        totalReserved: number;
+        reservations: ReservationRow[];
+      }>(
+        `/api/stocks/reservations?branchId=${encodeURIComponent(branchId)}&itemId=${encodeURIComponent(itemId)}`
+      );
+      setReservationModal({
+        itemId,
+        itemName,
+        itemUnit,
+        loading: false,
+        reservations: data.reservations,
+        totalReserved: data.totalReserved,
+      });
+    } catch {
+      setReservationModal({
+        itemId,
+        itemName,
+        itemUnit,
+        loading: false,
+        reservations: [],
+        totalReserved: 0,
+      });
+    }
+  };
+
   const addLine = useCallback((overrideQty?: number, skipFocus = false) => {
     const name = selectedItem?.name ?? itemQuery.trim();
     const quantity = overrideQty ?? parseFloat(qty);
@@ -528,6 +648,7 @@ export default function NewOrderPage() {
         unit: activeUnit ?? "",
         category: activeCategory || "TRADING_ITEM",
         quantity,
+        perItem: addPerItem,
         remarks: addRemarks,
         unverified: isUnverified,
         savedName: name,
@@ -541,7 +662,7 @@ export default function NewOrderPage() {
     if (!skipFocus) {
       setTimeout(() => itemRef.current?.focus(), 0);
     }
-  }, [selectedItem, itemQuery, qty, addRemarks, unverified, activeUnit, activeCategory]);
+  }, [selectedItem, itemQuery, qty, addPerItem, addRemarks, unverified, activeUnit, activeCategory]);
 
   useEffect(() => {
     if (!stockWarning) return;
@@ -555,13 +676,13 @@ export default function NewOrderPage() {
         if (warning.isAddRow) {
           const newIndex = lines.length;
           addLine(warning.requested, true);
-          setTimeout(() => rowRemarksRefs.current[newIndex]?.focus(), 0);
+          setTimeout(() => rowPerItemRefs.current[newIndex]?.focus(), 0);
         } else {
           updateLine(warning.lineIndex, {
             quantity: warning.requested,
             savedQty: warning.requested,
           });
-          setTimeout(() => rowRemarksRefs.current[warning.lineIndex]?.focus(), 0);
+          setTimeout(() => rowPerItemRefs.current[warning.lineIndex]?.focus(), 0);
         }
       }
       if (e.key === "Escape") {
@@ -612,6 +733,7 @@ export default function NewOrderPage() {
             itemName: l.unverified || !l.inventoryItemId ? l.name : undefined,
             category: l.category,
             quantity: l.quantity,
+            perItem: l.perItem.trim() || null,
             remarks: l.remarks.trim() || null,
           })),
         }),
@@ -871,11 +993,12 @@ export default function NewOrderPage() {
           <thead>
             <tr className="border-b text-left text-xs font-bold text-muted">
               <th className="w-8 py-1 pr-2">#</th>
-              <th className="py-1 pr-2">Item</th>
+              <th className="w-48 max-w-[12rem] py-1 pr-2">Item</th>
               <th className="w-14 py-1 pr-2">Unit</th>
               <th className="w-32 py-1 pr-2">Category</th>
               <th className="w-20 py-1 pr-2 text-right">Qty</th>
-              <th className="w-32 py-1 pr-2">Remarks</th>
+              <th className="w-24 py-1 pr-2">Per Item</th>
+              <th className="w-28 py-1 pr-2">Remarks</th>
               <th className="w-28 py-1 pr-2">Status</th>
             </tr>
           </thead>
@@ -883,7 +1006,7 @@ export default function NewOrderPage() {
             {lines.map((l, i) => (
               <tr key={i} className="border-b border-border/60 text-sm font-medium">
                 <td className="py-1 pr-2 text-muted">{i + 1}</td>
-                <td className="py-1 pr-2">
+                <td className="max-w-[12rem] py-1 pr-2">
                   <ItemSearchInput
                     value={l.name}
                     selected={
@@ -972,7 +1095,7 @@ export default function NewOrderPage() {
                             (l.name === l.savedName ? l.savedInventoryItemId : undefined);
                           const ok = await tryStockWarning(i, itemId, l.name, quantity, false);
                           if (!ok) return;
-                          setTimeout(() => rowRemarksRefs.current[i]?.focus(), 0);
+                          setTimeout(() => rowPerItemRefs.current[i]?.focus(), 0);
                         })();
                         return;
                       }
@@ -982,6 +1105,31 @@ export default function NewOrderPage() {
                       }
                     }}
                     className="ml-auto h-7 w-20 text-right text-sm"
+                  />
+                </td>
+                <td className="py-1 pr-2">
+                  <Input
+                    ref={(el) => {
+                      rowPerItemRefs.current[i] = el;
+                    }}
+                    type="text"
+                    placeholder="Per Item"
+                    value={l.perItem}
+                    onChange={(e) => updateLine(i, { perItem: e.target.value })}
+                    onKeyDown={(e) => {
+                      onItemsHomeEnd(e);
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setTimeout(() => rowRemarksRefs.current[i]?.focus(), 0);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        rowQtyRefs.current[i]?.focus();
+                      }
+                    }}
+                    className="h-7 text-sm"
                   />
                 </td>
                 <td className="py-1 pr-2">
@@ -1009,7 +1157,7 @@ export default function NewOrderPage() {
                       }
                       if (e.key === "Escape") {
                         e.preventDefault();
-                        rowQtyRefs.current[i]?.focus();
+                        rowPerItemRefs.current[i]?.focus();
                       }
                     }}
                     className="h-7 text-sm"
@@ -1035,7 +1183,7 @@ export default function NewOrderPage() {
             ))}
             <tr className="border-b border-border/60">
               <td className="py-1 pr-2 text-muted">{lines.length + 1}</td>
-              <td className="py-1 pr-2">
+              <td className="max-w-[12rem] py-1 pr-2">
                 <ItemSearchInput
                   value={itemQuery}
                   selected={selectedItem}
@@ -1086,7 +1234,7 @@ export default function NewOrderPage() {
                           true
                         );
                         if (!ok) return;
-                        setTimeout(() => addRemarksRef.current?.focus(), 0);
+                        setTimeout(() => addPerItemRef.current?.focus(), 0);
                       })();
                       return;
                     }
@@ -1096,6 +1244,29 @@ export default function NewOrderPage() {
                     }
                   }}
                   className="ml-auto h-7 w-20 text-right text-sm"
+                />
+              </td>
+              <td className="py-1 pr-2">
+                <Input
+                  ref={addPerItemRef}
+                  type="text"
+                  placeholder="Per Item"
+                  value={addPerItem}
+                  onChange={(e) => setAddPerItem(e.target.value)}
+                  onKeyDown={(e) => {
+                    onItemsHomeEnd(e);
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTimeout(() => addRemarksRef.current?.focus(), 0);
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      qtyRef.current?.focus();
+                    }
+                  }}
+                  className="h-7 text-sm"
                 />
               </td>
               <td className="py-1 pr-2">
@@ -1131,7 +1302,7 @@ export default function NewOrderPage() {
                     }
                     if (e.key === "Escape") {
                       e.preventDefault();
-                      qtyRef.current?.focus();
+                      addPerItemRef.current?.focus();
                     }
                   }}
                   className="h-7 text-sm"
@@ -1169,50 +1340,150 @@ export default function NewOrderPage() {
             onFocus={() => setRecentOrdersActive(true)}
             onBlur={() => setRecentOrdersActive(false)}
             className={cn(
-              "max-h-56 space-y-2 overflow-y-auto outline-none",
+              "outline-none",
               recentOrdersActive && "ring-2 ring-primary/30 rounded-md p-1 -m-1"
             )}
           >
             {recentOrders.length === 0 ? (
               <p className="text-sm text-muted">No previous orders</p>
             ) : (
-              recentOrders.map((order, i) => (
-                <div
-                  key={order.id}
-                  className={cn(
-                    "flex items-start justify-between gap-2 rounded-md border p-2 text-sm",
-                    i === selectedOrderIdx && recentOrdersActive
-                      ? "border-primary bg-primary/5"
-                      : "border-border"
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">
-                      {formatOrderDate(order.createdAt)}
-                    </p>
-                    <p className="mt-0.5 text-sm font-medium text-muted">
-                      {order.items
-                        .map((it) => `${it.itemName} x${formatQty(it.qty)}`)
-                        .join(" · ")}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="shrink-0"
-                    onClick={() => applyPastOrder(order)}
-                  >
-                    Use This Order
-                  </Button>
-                </div>
-              ))
+              <div className="overflow-x-auto">
+                <Table tableClassName="table-fixed">
+                  <THead>
+                    <TR>
+                      <TH className="w-28">Date</TH>
+                      <TH className="w-16">Stock</TH>
+                      <TH>Item</TH>
+                      <TH className="w-16">Unit</TH>
+                      <TH className="w-16 text-right">Qty</TH>
+                      <TH className="w-28" />
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {recentOrderRows.map((row, rowIdx) => {
+                      const orderIdx = recentOrders.findIndex((o) => o.id === row.orderId);
+                      const available = recentItemAvailability[row.itemId] ?? 0;
+                      const isOut = row.itemId ? available < row.qty : false;
+                      const order = recentOrders[orderIdx];
+                      return (
+                        <TR
+                          key={`${row.orderId}-${row.itemId}-${rowIdx}`}
+                          className={cn(
+                            orderIdx === selectedOrderIdx && recentOrdersActive
+                              ? "bg-primary/5"
+                              : "hover:bg-inherit"
+                          )}
+                        >
+                          <TD className="text-sm font-medium">
+                            {row.isFirstInOrder ? formatOrderDate(row.orderDate) : ""}
+                          </TD>
+                          <TD className="text-sm font-medium">
+                            {isOut ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void openReservationModal(row.itemId, row.itemName, row.unit)
+                                }
+                                className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 hover:bg-slate-200"
+                              >
+                                OUT
+                              </button>
+                            ) : (
+                              "—"
+                            )}
+                          </TD>
+                          <TD className="truncate text-sm font-medium">{row.itemName}</TD>
+                          <TD className="text-sm">{formatUnit(row.unit)}</TD>
+                          <TD className="text-right text-sm font-medium">{formatQty(row.qty)}</TD>
+                          <TD className="text-right">
+                            {row.isLastInOrder && order ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => applyPastOrder(order)}
+                              >
+                                Use This Order
+                              </Button>
+                            ) : null}
+                          </TD>
+                        </TR>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              </div>
             )}
             {recentOrders.length > 0 && (
-              <p className="text-xs text-muted">↑↓ navigate · Enter use · Esc back</p>
+              <p className="mt-2 text-xs text-muted">
+                ↑↓ navigate · Enter use · Esc back · Click OUT to see pending orders
+              </p>
             )}
           </div>
         </Card>
       )}
+
+      <Modal
+        open={reservationModal !== null}
+        onClose={() => setReservationModal(null)}
+        title={
+          reservationModal
+            ? `Reserved — ${reservationModal.itemName}${reservationModal.itemUnit ? ` (${formatUnit(reservationModal.itemUnit)})` : ""}`
+            : "Reserved Stock"
+        }
+        footer={
+          <Button variant="secondary" onClick={() => setReservationModal(null)}>
+            Close
+          </Button>
+        }
+      >
+        {reservationModal?.loading ? (
+          <p className="text-sm text-muted">Loading...</p>
+        ) : reservationModal && reservationModal.reservations.length === 0 ? (
+          <p className="text-sm text-muted">No pending reservations for this item.</p>
+        ) : reservationModal ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              Total reserved:{" "}
+              <span className="font-semibold text-foreground">
+                {formatQty(reservationModal.totalReserved)}
+              </span>{" "}
+              across {reservationModal.reservations.length} pending order
+              {reservationModal.reservations.length !== 1 ? "s" : ""}
+            </p>
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Order #</TH>
+                  <TH>Customer</TH>
+                  <TH>Phone</TH>
+                  <TH>Qty</TH>
+                  <TH>Created By</TH>
+                  <TH>Date</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {reservationModal.reservations.map((r) => (
+                  <TR
+                    key={r.orderId}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      setReservationModal(null);
+                      router.push(`/orders/${r.orderId}`);
+                    }}
+                  >
+                    <TD className="font-semibold text-primary">{r.orderNumber}</TD>
+                    <TD className="font-semibold">{r.customerName}</TD>
+                    <TD>{r.customerPhone}</TD>
+                    <TD className="font-medium">{formatQty(r.quantity)}</TD>
+                    <TD className="text-muted">{r.createdBy}</TD>
+                    <TD className="text-muted">{formatOrderDate(r.createdAt)}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
+        ) : null}
+      </Modal>
 
       <div className="flex justify-end gap-2">
         <Button

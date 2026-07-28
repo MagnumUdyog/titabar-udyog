@@ -21,6 +21,7 @@ const itemSchema = z
     category: z.enum(["RAW_MATERIAL", "FINISHED_GOOD", "TRADING_ITEM"]).optional(),
     quantity: z.number().positive(),
     price: z.number().nonnegative().nullable().optional(),
+    perItem: z.string().optional().nullable(),
     remarks: z.string().optional().nullable(),
   })
   .refine((i) => i.inventoryItemId || (i.itemName && i.itemName.trim()), {
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest) {
 
     const order = await createOrderWithRetry(branchId, async (orderNumber) =>
       prisma.$transaction(async (tx) => {
-        const orderItemsData = resolvedItems.map(({ inv, quantity, price, remarks }) => ({
+        const orderItemsData = resolvedItems.map(({ inv, quantity, price, perItem, remarks }) => ({
           inventoryItemId: inv.id,
           category: inv.category,
           itemNameSnapshot: inv.name,
@@ -190,6 +191,7 @@ export async function POST(req: NextRequest) {
           quantity,
           price,
           lineTotal: price != null ? price : null,
+          perItem,
           remarks,
         }));
 

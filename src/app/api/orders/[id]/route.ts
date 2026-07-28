@@ -19,6 +19,7 @@ const itemSchema = z
     category: z.enum(["RAW_MATERIAL", "FINISHED_GOOD", "TRADING_ITEM"]).optional(),
     quantity: z.number().positive(),
     price: z.number().nonnegative().nullable().optional(),
+    perItem: z.string().optional().nullable(),
     remarks: z.string().optional().nullable(),
   })
   .refine((i) => i.inventoryItemId || (i.itemName && i.itemName.trim()), {
@@ -100,7 +101,7 @@ export async function PATCH(
         await tx.orderItem.deleteMany({ where: { orderId: id } });
 
         const createdItems = [];
-        const orderItemsData = resolvedItems.map(({ inv, quantity, price, remarks }) => ({
+        const orderItemsData = resolvedItems.map(({ inv, quantity, price, perItem, remarks }) => ({
           orderId: id,
           inventoryItemId: inv.id,
           category: inv.category,
@@ -109,6 +110,7 @@ export async function PATCH(
           quantity,
           price,
           lineTotal: price != null ? price : null,
+          perItem,
           remarks,
         }));
 

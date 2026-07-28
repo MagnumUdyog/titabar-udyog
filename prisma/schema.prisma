@@ -221,6 +221,7 @@ model OrderItem {
   quantity         Decimal
   price            Decimal?
   lineTotal        Decimal?
+  perItem          String?
   remarks          String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt

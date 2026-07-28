@@ -23,6 +23,7 @@ interface OrderLine {
   unit: string;
   category: string;
   quantity: number;
+  perItem: string;
   remarks: string;
   unverified: boolean;
   savedName: string;
@@ -54,8 +55,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const addRemarksRef = useRef<HTMLInputElement>(null);
   const rowNameRefs = useRef<(HTMLInputElement | null)[]>([]);
   const rowQtyRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const rowPerItemRefs = useRef<(HTMLInputElement | null)[]>([]);
   const rowRemarksRefs = useRef<(HTMLInputElement | null)[]>([]);
   const addRef = useRef<HTMLButtonElement>(null);
+  const addPerItemRef = useRef<HTMLInputElement>(null);
   const stockWarningModalRef = useRef<HTMLDivElement>(null);
   const itemNotFoundModalRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +77,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const [selectedItem, setSelectedItem] = useState<InventorySearchItem | null>(null);
   const [unverified, setUnverified] = useState(false);
   const [qty, setQty] = useState("");
+  const [addPerItem, setAddPerItem] = useState("");
   const [addRemarks, setAddRemarks] = useState("");
 
   const [lineWarnings, setLineWarnings] = useState<Record<number, { lowStock: boolean }>>({});
@@ -118,6 +122,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
               unit: (item.unitSnapshot as string) || "",
               category: item.category as string,
               quantity,
+              perItem: (item.perItem as string) || "",
               remarks: (item.remarks as string) || "",
               unverified: false,
               savedName: name,
@@ -170,6 +175,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     setSelectedItem(null);
     setUnverified(false);
     setQty("");
+    setAddPerItem("");
     setAddRemarks("");
   };
 
@@ -181,7 +187,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   };
 
   const focusLastLineRemarks = () => {
-    if (lines.length > 0) rowRemarksRefs.current[lines.length - 1]?.focus();
+    if (lines.length > 0) rowPerItemRefs.current[lines.length - 1]?.focus();
     else focusAddress();
   };
 
@@ -289,8 +295,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     }, 0);
   };
 
-  const focusLineRemarks = (lineIndex: number) => {
-    setTimeout(() => rowRemarksRefs.current[lineIndex]?.focus(), 0);
+  const focusLinePerItem = (lineIndex: number) => {
+    setTimeout(() => rowPerItemRefs.current[lineIndex]?.focus(), 0);
   };
 
   const confirmRequestedStock = () => {
@@ -300,10 +306,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     if (isAddRow) {
       const newIndex = lines.length;
       addLine(requested, true);
-      focusLineRemarks(newIndex);
+      focusLinePerItem(newIndex);
     } else {
       updateLine(lineIndex, { quantity: requested, savedQty: requested });
-      focusLineRemarks(lineIndex);
+      focusLinePerItem(lineIndex);
     }
   };
 
@@ -335,6 +341,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         unit: activeUnit ?? "",
         category: activeCategory || "TRADING_ITEM",
         quantity,
+        perItem: addPerItem,
         remarks: addRemarks,
         unverified: isUnverified,
         savedName: name,
@@ -348,7 +355,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     if (!skipFocus) {
       setTimeout(() => itemRef.current?.focus(), 0);
     }
-  }, [selectedItem, itemQuery, qty, addRemarks, unverified, activeUnit, activeCategory]);
+  }, [selectedItem, itemQuery, qty, addPerItem, addRemarks, unverified, activeUnit, activeCategory]);
 
   useEffect(() => {
     if (!branchId) {
@@ -396,13 +403,13 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         if (warning.isAddRow) {
           const newIndex = lines.length;
           addLine(warning.requested, true);
-          setTimeout(() => rowRemarksRefs.current[newIndex]?.focus(), 0);
+          setTimeout(() => rowPerItemRefs.current[newIndex]?.focus(), 0);
         } else {
           updateLine(warning.lineIndex, {
             quantity: warning.requested,
             savedQty: warning.requested,
           });
-          setTimeout(() => rowRemarksRefs.current[warning.lineIndex]?.focus(), 0);
+          setTimeout(() => rowPerItemRefs.current[warning.lineIndex]?.focus(), 0);
         }
       }
       if (e.key === "Escape") {
@@ -451,6 +458,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             itemName: l.unverified || !l.inventoryItemId ? l.name : undefined,
             category: l.category,
             quantity: l.quantity,
+            perItem: l.perItem.trim() || null,
             remarks: l.remarks.trim() || null,
           })),
         }),
@@ -666,11 +674,12 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           <thead>
             <tr className="border-b text-left text-xs font-bold text-muted">
               <th className="w-8 py-1 pr-2">#</th>
-              <th className="py-1 pr-2">Item</th>
+              <th className="w-48 max-w-[12rem] py-1 pr-2">Item</th>
               <th className="w-14 py-1 pr-2">Unit</th>
               <th className="w-32 py-1 pr-2">Category</th>
               <th className="w-20 py-1 pr-2 text-right">Qty</th>
-              <th className="w-32 py-1 pr-2">Remarks</th>
+              <th className="w-24 py-1 pr-2">Per Item</th>
+              <th className="w-28 py-1 pr-2">Remarks</th>
               <th className="w-28 py-1 pr-2">Status</th>
             </tr>
           </thead>
@@ -678,7 +687,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             {lines.map((l, i) => (
               <tr key={i} className="border-b border-border/60 text-sm font-medium">
                 <td className="py-1 pr-2 text-muted">{i + 1}</td>
-                <td className="py-1 pr-2">
+                <td className="max-w-[12rem] py-1 pr-2">
                   <ItemSearchInput
                     value={l.name}
                     selected={
@@ -767,7 +776,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                             (l.name === l.savedName ? l.savedInventoryItemId : undefined);
                           const ok = await tryStockWarning(i, itemId, l.name, quantity, false);
                           if (!ok) return;
-                          setTimeout(() => rowRemarksRefs.current[i]?.focus(), 0);
+                          setTimeout(() => rowPerItemRefs.current[i]?.focus(), 0);
                         })();
                         return;
                       }
@@ -777,6 +786,31 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                       }
                     }}
                     className="ml-auto h-7 w-20 text-right text-sm"
+                  />
+                </td>
+                <td className="py-1 pr-2">
+                  <Input
+                    ref={(el) => {
+                      rowPerItemRefs.current[i] = el;
+                    }}
+                    type="text"
+                    placeholder="Per Item"
+                    value={l.perItem}
+                    onChange={(e) => updateLine(i, { perItem: e.target.value })}
+                    onKeyDown={(e) => {
+                      onItemsHomeEnd(e);
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setTimeout(() => rowRemarksRefs.current[i]?.focus(), 0);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        rowQtyRefs.current[i]?.focus();
+                      }
+                    }}
+                    className="h-7 text-sm"
                   />
                 </td>
                 <td className="py-1 pr-2">
@@ -804,7 +838,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                       }
                       if (e.key === "Escape") {
                         e.preventDefault();
-                        rowQtyRefs.current[i]?.focus();
+                        rowPerItemRefs.current[i]?.focus();
                       }
                     }}
                     className="h-7 text-sm"
@@ -830,7 +864,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             ))}
             <tr className="border-b border-border/60">
               <td className="py-1 pr-2 text-muted">{lines.length + 1}</td>
-              <td className="py-1 pr-2">
+              <td className="max-w-[12rem] py-1 pr-2">
                 <ItemSearchInput
                   value={itemQuery}
                   selected={selectedItem}
@@ -881,7 +915,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                           true
                         );
                         if (!ok) return;
-                        setTimeout(() => addRemarksRef.current?.focus(), 0);
+                        setTimeout(() => addPerItemRef.current?.focus(), 0);
                       })();
                       return;
                     }
@@ -891,6 +925,29 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     }
                   }}
                   className="ml-auto h-7 w-20 text-right text-sm"
+                />
+              </td>
+              <td className="py-1 pr-2">
+                <Input
+                  ref={addPerItemRef}
+                  type="text"
+                  placeholder="Per Item"
+                  value={addPerItem}
+                  onChange={(e) => setAddPerItem(e.target.value)}
+                  onKeyDown={(e) => {
+                    onItemsHomeEnd(e);
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTimeout(() => addRemarksRef.current?.focus(), 0);
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      qtyRef.current?.focus();
+                    }
+                  }}
+                  className="h-7 text-sm"
                 />
               </td>
               <td className="py-1 pr-2">
@@ -926,7 +983,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     }
                     if (e.key === "Escape") {
                       e.preventDefault();
-                      qtyRef.current?.focus();
+                      addPerItemRef.current?.focus();
                     }
                   }}
                   className="h-7 text-sm"

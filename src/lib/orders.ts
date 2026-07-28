@@ -9,6 +9,7 @@ export interface OrderItemInput {
   category?: StockCategory;
   quantity: number;
   price?: number | null;
+  perItem?: string | null;
   remarks?: string | null;
 }
 
@@ -17,6 +18,7 @@ export async function resolveOrderItems(items: OrderItemInput[]) {
     inv: { id: string; name: string; unit: string | null; category: StockCategory };
     quantity: number;
     price: number | null;
+    perItem: string | null;
     remarks: string | null;
   }> = [];
 
@@ -65,12 +67,14 @@ export async function resolveOrderItems(items: OrderItemInput[]) {
       throw new StockError("Each line needs an item from inventory or a name");
     }
 
+    const perItem = item.perItem?.trim() || null;
     const remarks = item.remarks?.trim() || null;
 
     resolved.push({
       inv,
       quantity: item.quantity,
       price: normalizeOrderPrice(item.price),
+      perItem,
       remarks,
     });
   }

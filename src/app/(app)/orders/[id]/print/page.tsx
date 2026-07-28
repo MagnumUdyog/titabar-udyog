@@ -14,6 +14,7 @@ interface Challan {
     name: string;
     unit: string;
     quantity: number;
+    perItem?: string | null;
     price: number | null;
     category: string;
   }>;
@@ -88,6 +89,7 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
               <th className="text-left text-xs font-bold">Item</th>
               <th className="w-16 px-2 text-right text-xs font-bold">Unit</th>
               <th className="w-16 px-2 text-right text-xs font-bold">Qty</th>
+              <th className="w-24 px-2 text-left text-xs font-bold">Per Item</th>
             </tr>
           </thead>
           <tbody>
@@ -97,6 +99,7 @@ export default function PrintChallanPage({ params }: { params: Promise<{ id: str
                   <td className="py-2 font-semibold">{item.name}</td>
                   <td className="px-2 text-right">{item.unit}</td>
                   <td className="px-2 text-right">{formatQty(item.quantity)}</td>
+                  <td className="px-2">{item.perItem || "—"}</td>
                 </tr>
             ))}
           </tbody>

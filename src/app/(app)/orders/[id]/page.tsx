@@ -53,10 +53,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <TH>Item</TH>
                 <TH>Unit</TH>
                 <TH>Qty</TH>
+                <TH>Per Item</TH>
                 <TH>Remarks</TH>
               </TR>
             </THead>
-            <SkeletonTable rows={5} cols={5} />
+            <SkeletonTable rows={5} cols={6} />
           </Table>
         </Card>
       </div>
@@ -244,12 +245,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <TH>Item</TH>
               <TH>Unit</TH>
               <TH>Qty</TH>
+              <TH>Per Item</TH>
               <TH>Remarks</TH>
             </TR>
           </THead>
           <TBody>
             {items.map((item, index) => {
               const qty = Number(item.quantity);
+              const itemPerItem = (item.perItem as string) || "";
               const itemRemarks = (item.remarks as string) || "";
               return (
                 <TR key={item.id as string}>
@@ -257,6 +260,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <TD className="font-semibold">{item.itemNameSnapshot as string}</TD>
                   <TD>{item.unitSnapshot as string}</TD>
                   <TD>{formatQty(qty)}</TD>
+                  <TD>{itemPerItem || "—"}</TD>
                   <TD>{itemRemarks || "—"}</TD>
                 </TR>
               );

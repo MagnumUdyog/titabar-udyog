@@ -43,6 +43,7 @@ export async function GET(
         name: item.itemNameSnapshot,
         unit: item.unitSnapshot,
         quantity: toNumber(item.quantity),
+        perItem: item.perItem,
         price: priceFromDb(item.price),
         category: item.category,
       })),
