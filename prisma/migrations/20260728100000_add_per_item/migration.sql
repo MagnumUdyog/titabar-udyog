@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "OrderItem" ADD COLUMN "perItem" TEXT;
+ALTER TABLE "OrderItem" ADD COLUMN IF NOT EXISTS "perItem" TEXT;

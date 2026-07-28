@@ -33,7 +33,8 @@ export async function GET(req: NextRequest) {
           status: "PENDING",
         },
       },
-      include: {
+      select: {
+        quantity: true,
         order: {
           select: {
             id: true,

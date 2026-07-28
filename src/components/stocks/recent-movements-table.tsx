@@ -1,31 +1,14 @@
-"use client";
+﻿"use client";
 
 import { Fragment, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import {
+  StockOrdersModal,
+  type StockOrderRow,
+} from "@/components/stocks/stock-orders-modal";
 import { api } from "@/lib/fetcher";
-import { formatOrderDate, formatQty, formatUnit } from "@/lib/utils";
-
-interface ReservationRow {
-  orderId: string;
-  orderNumber: string;
-  customerName: string;
-  customerPhone: string;
-  quantity: number;
-  createdAt: string;
-  createdBy: string;
-}
-
-interface OutModalState {
-  itemName: string;
-  itemUnit: string;
-  loading: boolean;
-  reservations: ReservationRow[];
-  totalReserved: number;
-}
+import { formatQty, formatUnit } from "@/lib/utils";
 
 function groupByDate(movements: Array<Record<string, unknown>>) {
   const sorted = [...movements].sort(
@@ -57,94 +40,110 @@ function groupByDate(movements: Array<Record<string, unknown>>) {
   return groups;
 }
 
+async function loadOutModalData(movement: Record<string, unknown>): Promise<{
+  reservations: StockOrderRow[];
+}> {
+  const branchId = movement.branchId as string | undefined;
+  const item = movement.inventoryItem as { id: string };
+  const movementQty = Number(movement.quantity);
+  const referenceId = movement.referenceId as string | null | undefined;
+  const referenceType = movement.referenceType as string;
+
+  const isOrderLinked =
+    Boolean(referenceId) &&
+    (referenceType === "ORDER" || referenceType === "ORDER_SUBMIT");
+
+  if (isOrderLinked && referenceId) {
+    try {
+      const { order } = await api<{ order: Record<string, unknown> }>(
+        `/api/orders/${referenceId}`
+      );
+      const items = (order.items as Array<Record<string, unknown>>) || [];
+      const line = items.find((i) => i.inventoryItemId === item.id);
+      const lineQty = line ? Number(line.quantity) : movementQty;
+      const createdBy = order.createdBy as { name: string };
+
+      return {
+        reservations: [
+          {
+            orderId: order.id as string,
+            orderNumber: order.orderNumber as string,
+            customerName: order.customerName as string,
+            customerPhone: order.customerPhone as string,
+            quantity: lineQty,
+            createdAt: order.createdAt as string,
+            createdBy: createdBy.name,
+          },
+        ],
+      };
+    } catch {
+      /* fall through */
+    }
+  }
+
+  if (branchId && item.id) {
+    try {
+      const data = await api<{ reservations: StockOrderRow[] }>(
+        `/api/stocks/reservations?branchId=${encodeURIComponent(branchId)}&itemId=${encodeURIComponent(item.id)}`
+      );
+      const reservations = data.reservations ?? [];
+      if (reservations.length > 0) {
+        return { reservations };
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  return { reservations: [] };
+}
+
 export function RecentMovementsTable({
   movements,
 }: {
   movements: Array<Record<string, unknown>>;
 }) {
-  const router = useRouter();
-  const [outModal, setOutModal] = useState<OutModalState | null>(null);
   const groups = groupByDate(movements);
+  const [outModal, setOutModal] = useState<{
+    open: boolean;
+    title: string;
+    loading: boolean;
+    reservations: StockOrderRow[];
+  }>({
+    open: false,
+    title: "",
+    loading: false,
+    reservations: [],
+  });
 
   const openOutModal = async (movement: Record<string, unknown>) => {
-    const inv = movement.inventoryItem as { id: string; name: string; unit?: string | null };
-    const branchId = movement.branchId as string;
-    const referenceType = movement.referenceType as string;
-    const referenceId = movement.referenceId as string | null | undefined;
-    const itemId = (movement.inventoryItemId as string) || inv.id;
+    const inv = movement.inventoryItem as { name: string; unit?: string | null };
     const itemName = inv.name;
     const itemUnit = inv.unit || "";
+    const title = `Out — ${itemName}${itemUnit ? ` (${formatUnit(itemUnit)})` : ""}`;
 
     setOutModal({
-      itemName,
-      itemUnit,
+      open: true,
+      title,
       loading: true,
       reservations: [],
-      totalReserved: 0,
     });
 
     try {
-      if (
-        referenceId &&
-        (referenceType === "ORDER" || referenceType === "ORDER_SUBMIT")
-      ) {
-        const data = await api<{
-          order: {
-            id: string;
-            orderNumber: string;
-            customerName: string;
-            customerPhone: string;
-            createdAt: string;
-            createdBy: { name: string };
-            items: Array<{ inventoryItemId: string; quantity: number }>;
-          };
-        }>(`/api/orders/${referenceId}`);
-        const order = data.order;
-        const line = order.items.find((i) => i.inventoryItemId === itemId);
-        const quantity = line ? Number(line.quantity) : Number(movement.quantity);
-
-        setOutModal({
-          itemName,
-          itemUnit,
-          loading: false,
-          totalReserved: quantity,
-          reservations: [
-            {
-              orderId: order.id,
-              orderNumber: order.orderNumber,
-              customerName: order.customerName,
-              customerPhone: order.customerPhone,
-              quantity,
-              createdAt: order.createdAt,
-              createdBy: order.createdBy.name,
-            },
-          ],
-        });
-        return;
-      }
-
-      const data = await api<{
-        totalReserved: number;
-        reservations: ReservationRow[];
-      }>(
-        `/api/stocks/reservations?branchId=${encodeURIComponent(branchId)}&itemId=${encodeURIComponent(itemId)}`
-      );
+      const data = await loadOutModalData(movement);
 
       setOutModal({
-        itemName,
-        itemUnit,
+        open: true,
+        title,
         loading: false,
         reservations: data.reservations,
-        totalReserved: data.totalReserved,
       });
     } catch {
-      setOutModal({
-        itemName,
-        itemUnit,
+      setOutModal((prev) => ({
+        ...prev,
         loading: false,
         reservations: [],
-        totalReserved: 0,
-      });
+      }));
     }
   };
 
@@ -241,68 +240,13 @@ export function RecentMovementsTable({
         </TBody>
       </Table>
 
-      <Modal
-        open={outModal !== null}
-        onClose={() => setOutModal(null)}
-        title={
-          outModal
-            ? `Reserved — ${outModal.itemName}${outModal.itemUnit ? ` (${formatUnit(outModal.itemUnit)})` : ""}`
-            : "Reserved Stock"
-        }
-        footer={
-          <Button variant="secondary" onClick={() => setOutModal(null)}>
-            Close
-          </Button>
-        }
-      >
-        {outModal?.loading ? (
-          <p className="text-sm text-muted">Loading...</p>
-        ) : outModal && outModal.reservations.length === 0 ? (
-          <p className="text-sm text-muted">No pending reservations for this item.</p>
-        ) : outModal ? (
-          <div className="space-y-3">
-            <p className="text-sm text-muted">
-              Total reserved:{" "}
-              <span className="font-semibold text-foreground">
-                {formatQty(outModal.totalReserved)}
-              </span>{" "}
-              across {outModal.reservations.length} pending order
-              {outModal.reservations.length !== 1 ? "s" : ""}
-            </p>
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Order #</TH>
-                  <TH>Customer</TH>
-                  <TH>Phone</TH>
-                  <TH>Qty</TH>
-                  <TH>Created By</TH>
-                  <TH>Date</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {outModal.reservations.map((r) => (
-                  <TR
-                    key={r.orderId}
-                    className="cursor-pointer"
-                    onClick={() => {
-                      setOutModal(null);
-                      router.push(`/orders/${r.orderId}`);
-                    }}
-                  >
-                    <TD className="font-semibold text-primary">{r.orderNumber}</TD>
-                    <TD className="font-semibold">{r.customerName}</TD>
-                    <TD>{r.customerPhone}</TD>
-                    <TD className="font-medium">{formatQty(r.quantity)}</TD>
-                    <TD className="text-muted">{r.createdBy}</TD>
-                    <TD className="text-muted">{formatOrderDate(r.createdAt)}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          </div>
-        ) : null}
-      </Modal>
+      <StockOrdersModal
+        open={outModal.open}
+        onClose={() => setOutModal((prev) => ({ ...prev, open: false }))}
+        title={outModal.title}
+        loading={outModal.loading}
+        reservations={outModal.reservations}
+      />
     </>
   );
 }
