@@ -552,20 +552,22 @@ export default function NewOrderPage() {
   );
 
   useEffect(() => {
-    if (!branchId || recentOrderRows.length === 0) {
+    if (!branchId || recentOrders.length === 0) {
       setRecentItemAvailability({});
       return;
     }
     const byId = new Map<string, { inventoryItemId: string; quantity: number; itemName: string }>();
-    for (const row of recentOrderRows) {
-      if (!row.itemId) continue;
-      const existing = byId.get(row.itemId);
-      if (!existing || row.qty > existing.quantity) {
-        byId.set(row.itemId, {
-          inventoryItemId: row.itemId,
-          quantity: row.qty,
-          itemName: row.itemName,
-        });
+    for (const order of recentOrders) {
+      for (const item of order.items) {
+        if (!item.itemId) continue;
+        const existing = byId.get(item.itemId);
+        if (!existing || item.qty > existing.quantity) {
+          byId.set(item.itemId, {
+            inventoryItemId: item.itemId,
+            quantity: item.qty,
+            itemName: item.itemName,
+          });
+        }
       }
     }
     const items = Array.from(byId.values());
@@ -1356,7 +1358,7 @@ export default function NewOrderPage() {
                       <TH>Item</TH>
                       <TH className="w-16">Unit</TH>
                       <TH className="w-16 text-right">Qty</TH>
-                      <TH className="w-28" />
+                      <TH className="w-28">Action</TH>
                     </TR>
                   </THead>
                   <TBody>
