@@ -209,7 +209,7 @@ export function ItemSearchInput({
       />
 
       {showDropdown && (
-        <ul className="absolute z-20 mt-0.5 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
+        <ul className="absolute z-30 mt-0.5 max-h-48 w-[28rem] max-w-[min(28rem,calc(100vw-2rem))] overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
           {loading &&
             Array.from({ length: 4 }).map((_, i) => (
               <li key={i} className="px-3 py-2">
@@ -235,7 +235,7 @@ export function ItemSearchInput({
                   pick(item);
                 }}
               >
-                <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                <span className="min-w-0 flex-1 whitespace-nowrap">{item.name}</span>
                 <Badge status={item.category} className="shrink-0 text-[10px]" />
               </li>
             ))}
