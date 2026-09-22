@@ -18,16 +18,21 @@ export async function GET(req: NextRequest) {
     const itemId = searchParams.get("itemId");
     const search = searchParams.get("search") || "";
     const isExport = searchParams.get("export") === "true";
+    const stockFilterParam = searchParams.get("stockFilter");
     const stockFilter: StockAvailabilityFilter =
-      searchParams.get("stockFilter") === "low"
+      stockFilterParam === "low"
         ? "low"
-        : searchParams.get("stockFilter") === "all"
-          ? "all"
-          : searchParams.get("stockFilter") === "available"
-            ? "available"
-            : isExport
+        : stockFilterParam === "reserved"
+          ? "reserved"
+          : stockFilterParam === "onHand"
+            ? "onHand"
+            : stockFilterParam === "all"
               ? "all"
-              : "available";
+              : stockFilterParam === "available"
+                ? "available"
+                : isExport
+                  ? "all"
+                  : "available";
     const isSqlite = process.env.DATABASE_URL?.startsWith("file:") ?? false;
     const searchFilter = buildStockItemSearchFilter(search, isSqlite);
 
@@ -104,7 +109,13 @@ export async function GET(req: NextRequest) {
 
     const filteredBalances = usePostFilter
       ? mergedBalances.filter((row) =>
-          passesStockAvailabilityFilter(row.availableQty, row.moq, stockFilter)
+          passesStockAvailabilityFilter(
+            row.availableQty,
+            row.moq,
+            stockFilter,
+            row.reservedQty,
+            row.onHandQty
+          )
         )
       : mergedBalances;
 

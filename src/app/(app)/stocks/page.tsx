@@ -27,7 +27,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 
 type Category = "RAW_MATERIAL" | "FINISHED_GOOD" | "TRADING_ITEM";
 type TabKey = Category | "ALL";
-type StockFilterKey = "available" | "low" | "all";
+type StockFilterKey = "available" | "low" | "reserved" | "onHand" | "all";
 
 const PAGE_SIZE = 50;
 const MOVEMENTS_PAGE_SIZE = 20;
@@ -61,6 +61,8 @@ const TABS: { key: TabKey; label: string }[] = [
 const STOCK_FILTERS: { key: StockFilterKey; label: string }[] = [
   { key: "available", label: "Available Stock" },
   { key: "low", label: "Low Stock" },
+  { key: "reserved", label: "Reserved" },
+  { key: "onHand", label: "On Hand" },
   { key: "all", label: "All" },
 ];
 

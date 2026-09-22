@@ -1,14 +1,23 @@
 import { StockCategory } from "@prisma/client";
 
-export type StockAvailabilityFilter = "available" | "low" | "all";
+export type StockAvailabilityFilter =
+  | "available"
+  | "low"
+  | "reserved"
+  | "onHand"
+  | "all";
 
 export function passesStockAvailabilityFilter(
   availableQty: number,
   moq: number,
-  filter: StockAvailabilityFilter
+  filter: StockAvailabilityFilter,
+  reservedQty = 0,
+  onHandQty = 0
 ): boolean {
   if (filter === "all") return true;
   if (filter === "low") return availableQty <= moq;
+  if (filter === "reserved") return reservedQty > 0;
+  if (filter === "onHand") return onHandQty > 0;
   return availableQty > 0;
 }
 
